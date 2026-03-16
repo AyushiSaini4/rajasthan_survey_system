@@ -83,7 +83,8 @@
       "Bash(grep -rn http:// /Users/ani/Desktop/rajasthan-survey-system/app /Users/ani/Desktop/rajasthan-survey-system/components /Users/ani/Desktop/rajasthan-survey-system/lib --include=*.ts --include=*.tsx --include=*.mjs)",
       "Bash(/usr/local/bin/node --version)",
       "Bash(command -v node)",
-      "Bash(~/.nvm/versions/node/v20.20.1/bin/node -e \":*)"
+      "Bash(~/.nvm/versions/node/v20.20.1/bin/node -e \":*)",
+      "Bash(cat /Users/ani/Desktop/rajasthan-survey-system/app/unit/job/[jobId]/page.tsx)"
     ]
   }
 }

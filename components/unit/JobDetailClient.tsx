@@ -84,6 +84,7 @@ export default function JobDetailClient({ job }: Props) {
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [actionMsg, setActionMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
+  // Defensive: location can be null if the locations row is missing
   const loc = job.location
   const isTerminal = ['qc_passed', 'qc_failed', 'dispatched'].includes(job.status)
 
@@ -149,9 +150,13 @@ export default function JobDetailClient({ job }: Props) {
       {/* ── Header ────────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-mono text-gray-400 mb-0.5">{loc.location_code}</div>
-          <h1 className="text-xl font-bold text-gray-900">{loc.name ?? loc.location_code}</h1>
-          {(loc.district || loc.block || loc.village) && (
+          <div className="text-xs font-mono text-gray-400 mb-0.5">
+            {loc?.location_code ?? 'Unknown location'}
+          </div>
+          <h1 className="text-xl font-bold text-gray-900">
+            {loc?.name ?? loc?.location_code ?? 'Location unavailable'}
+          </h1>
+          {loc && (loc.district || loc.block || loc.village) && (
             <p className="text-sm text-gray-500 mt-0.5">
               {[loc.village, loc.block, loc.district].filter(Boolean).join(', ')}
             </p>

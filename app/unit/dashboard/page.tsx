@@ -33,7 +33,17 @@ function statusBadgeClass(status: ProductionJobStatus): string {
 // ─── Job card ─────────────────────────────────────────────────────────────────
 
 function JobCard({ job }: { job: ProductionJobWithLocation }) {
+  // Defensive: location join can return null if the locations row is missing or
+  // RLS is blocking the join.  Render a fallback rather than crashing the page.
   const loc = job.location
+  if (!loc) {
+    return (
+      <div className="bg-white rounded-lg border border-amber-200 p-4 text-sm text-amber-700">
+        Job {job.id.slice(0, 8)}… — location data unavailable (contact admin)
+      </div>
+    )
+  }
+
   const hasQty =
     (job.qty_tiles ?? 0) > 0 ||
     (job.qty_toilet_units ?? 0) > 0 ||
@@ -164,7 +174,8 @@ export default async function UnitDashboardPage() {
 
   try {
     ;({ user, role } = await getUserWithRole())
-  } catch {
+  } catch (err) {
+    console.error('[UnitDashboard] getUserWithRole failed:', err)
     redirect('/login')
   }
 
@@ -175,8 +186,11 @@ export default async function UnitDashboardPage() {
   let unit = null
   try {
     unit = await getUnitForCurrentUser(user.id)
-  } catch {
-    // Unexpected failure — show the "no unit" screen rather than crashing
+  } catch (err) {
+    // createAdminClient() throws if SUPABASE_SERVICE_ROLE_KEY is missing —
+    // that error is logged inside getUnitForCurrentUser, but log it here too
+    // so it's easy to find in Vercel logs alongside the page context.
+    console.error('[UnitDashboard] getUnitForCurrentUser failed for user', user.id, err)
   }
 
   if (!unit) {
@@ -193,7 +207,8 @@ export default async function UnitDashboardPage() {
 
   try {
     jobs = await getUnitJobs(unit.id)
-  } catch {
+  } catch (err) {
+    console.error('[UnitDashboard] getUnitJobs failed for unit', unit.id, err)
     fetchError = 'Could not load your production jobs. Please refresh.'
   }
 

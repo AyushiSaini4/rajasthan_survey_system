@@ -10,26 +10,25 @@ interface Props {
 }
 
 export default async function JobDetailPage({ params }: Props) {
-  // ── Auth guard — wrapped in try/catch so a transient Supabase network error
-  // doesn't bubble up as a hard 500; we redirect to login instead.
+  // ── Auth guard ─────────────────────────────────────────────────────────────
   let user: Awaited<ReturnType<typeof getUserWithRole>>['user'] = null
   let role: Awaited<ReturnType<typeof getUserWithRole>>['role'] = null
 
   try {
     ;({ user, role } = await getUserWithRole())
-  } catch {
+  } catch (err) {
+    console.error('[JobDetailPage] getUserWithRole failed:', err)
     redirect('/login')
   }
 
   if (!user || role !== 'manufacturing_unit') redirect('/login')
 
-  // Find this user's unit.
-  // Pass user.id directly — avoids a second auth.getUser() inside the lib function.
+  // ── Unit lookup ────────────────────────────────────────────────────────────
   let unit = null
   try {
     unit = await getUnitForCurrentUser(user.id)
-  } catch {
-    // Unexpected failure — show the "no unit" screen rather than crashing
+  } catch (err) {
+    console.error('[JobDetailPage] getUnitForCurrentUser failed for user', user.id, err)
   }
 
   if (!unit) {
@@ -41,8 +40,16 @@ export default async function JobDetailPage({ params }: Props) {
     )
   }
 
-  // Fetch job — enforces unit ownership in the query
-  const job = await getJobForUnit(params.jobId, unit.id)
+  // ── Job fetch — wrapped in try/catch so a Supabase error shows notFound
+  // rather than hitting the error boundary. getJobForUnit returns null (not
+  // throws) for most errors, but we guard the await itself too.
+  let job = null
+  try {
+    job = await getJobForUnit(params.jobId, unit.id)
+  } catch (err) {
+    console.error('[JobDetailPage] getJobForUnit failed for job', params.jobId, 'unit', unit.id, err)
+  }
+
   if (!job) notFound()
 
   return <JobDetailClient job={job} />

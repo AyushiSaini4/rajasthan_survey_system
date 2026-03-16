@@ -1,46 +1,84 @@
-import { createClient } from './server'
 import { createAdminClient } from './admin'
 import type { ProductionJob, ManufacturingUnit, Location } from '@/types'
 
-// Note: createClient is used by getUnitJobs and getJobForUnit (user-scoped RLS queries).
-// getUnitForCurrentUser uses only createAdminClient so it doesn't call cookies() internally.
+// ─── Why admin client everywhere in this file ─────────────────────────────────
+//
+// getUnitJobs and getJobForUnit previously used the user-scoped createClient().
+// The embedded .select('location:locations(...)') join requires the querying
+// user to also have SELECT on the locations table via RLS.  If those RLS
+// policies are not active in production, the join silently returns null for
+// every row — causing a TypeError at render time ("Cannot read properties of
+// null, reading 'location_code'") that bubbles up to the error boundary.
+//
+// Fix: use createAdminClient() so the join always resolves regardless of RLS
+// state.  Security is maintained programmatically:
+//   • unitId always comes from getUnitForCurrentUser(user.id) — auth-gated
+//   • getUnitJobs filters by unit_id = unitId
+//   • getJobForUnit filters by BOTH job id AND unit_id
+//   → a manufacturing_unit user can never access another unit's jobs
+//
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ─── Extended types ───────────────────────────────────────────────────────────
 
 export interface ProductionJobWithLocation extends ProductionJob {
-  location: Pick<Location, 'id' | 'location_code' | 'name' | 'district' | 'block' | 'village' | 'status'>
+  location: Pick<Location, 'id' | 'location_code' | 'name' | 'district' | 'block' | 'village' | 'status'> | null
 }
+
+// ─── Shared select string ─────────────────────────────────────────────────────
+
+const JOB_SELECT = `
+  id,
+  location_id,
+  survey_id,
+  unit_id,
+  assigned_by,
+  assigned_at,
+  qty_tiles,
+  qty_toilet_units,
+  qty_ramp_units,
+  qty_fittings,
+  qty_other,
+  progress_pct,
+  status,
+  production_notes,
+  completed_at,
+  dispatched_at,
+  location:locations(id, location_code, name, district, block, village, status)
+`
 
 // ─── Manufacturing unit lookup ────────────────────────────────────────────────
 
 /**
  * Finds the ManufacturingUnit row whose user_id matches the given userId.
- *
- * Accepts userId as a parameter so the caller (a server component that already
- * has the user from getUserWithRole()) doesn't need to make a second auth
- * round-trip here. Using only the admin client avoids the createClient() /
- * cookies() call that was causing the 500 before the error boundary mounted.
+ * Accepts userId as a parameter so the caller does not need a second auth
+ * round-trip. Uses admin client — access is scoped by .eq('user_id', userId).
  */
 export async function getUnitForCurrentUser(userId: string): Promise<ManufacturingUnit | null> {
   try {
-    const adminClient = createAdminClient()
-    const { data, error } = await adminClient
+    const admin = createAdminClient()
+    const { data, error } = await admin
       .from('manufacturing_units')
       .select('id, name, district, contact_name, contact_phone, user_id, is_active')
       .eq('user_id', userId)
       .single()
 
     if (error) {
-      // PGRST116 = no rows found (unit not yet set up) — not a real error
-      if (error.code !== 'PGRST116') {
-        console.error('[getUnitForCurrentUser]', error.message)
+      if (error.code === 'PGRST116') {
+        // No rows — unit not yet set up for this user, not a system error
+        console.log(`[getUnitForCurrentUser] No unit found for user ${userId}`)
+        return null
       }
+      console.error(
+        '[getUnitForCurrentUser] Supabase query failed:',
+        { code: error.code, message: error.message, hint: error.hint, userId }
+      )
       return null
     }
 
     return data as unknown as ManufacturingUnit
   } catch (err) {
-    console.error('[getUnitForCurrentUser] unexpected error:', err)
+    console.error('[getUnitForCurrentUser] Unexpected exception:', err)
     return null
   }
 }
@@ -49,84 +87,88 @@ export async function getUnitForCurrentUser(userId: string): Promise<Manufacturi
 
 /**
  * Returns all production jobs for a given unit, joined with their location.
- * RLS ensures the manufacturing_unit user can only read their own unit's jobs.
+ * Uses admin client so the locations join resolves regardless of RLS state.
+ * Access restricted to the authenticated user's own unit via unitId filter.
  */
 export async function getUnitJobs(unitId: string): Promise<ProductionJobWithLocation[]> {
-  const supabase = createClient()
+  try {
+    const admin = createAdminClient()
 
-  const { data, error } = await supabase
-    .from('production_jobs')
-    .select(`
-      id,
-      location_id,
-      survey_id,
-      unit_id,
-      assigned_by,
-      assigned_at,
-      qty_tiles,
-      qty_toilet_units,
-      qty_ramp_units,
-      qty_fittings,
-      qty_other,
-      progress_pct,
-      status,
-      production_notes,
-      completed_at,
-      dispatched_at,
-      location:locations(id, location_code, name, district, block, village, status)
-    `)
-    .eq('unit_id', unitId)
-    .order('assigned_at', { ascending: false })
+    const { data, error } = await admin
+      .from('production_jobs')
+      .select(JOB_SELECT)
+      .eq('unit_id', unitId)
+      .order('assigned_at', { ascending: false })
 
-  if (error) {
-    console.error('[getUnitJobs]', error.message)
-    throw new Error('Failed to fetch production jobs')
+    if (error) {
+      console.error(
+        '[getUnitJobs] Supabase query failed:',
+        { code: error.code, message: error.message, hint: error.hint, unitId }
+      )
+      throw new Error(`Failed to fetch production jobs: ${error.message}`)
+    }
+
+    const jobs = (data ?? []) as unknown as ProductionJobWithLocation[]
+
+    // Log a warning for any job where the location join returned null.
+    // This indicates an orphaned production_job referencing a non-existent location.
+    const nullLocations = jobs.filter((j) => !j.location)
+    if (nullLocations.length > 0) {
+      console.error(
+        `[getUnitJobs] ${nullLocations.length}/${jobs.length} jobs have null location for unit ${unitId}. ` +
+        `Job IDs: ${nullLocations.map((j) => j.id).join(', ')}`
+      )
+    }
+
+    return jobs
+  } catch (err) {
+    console.error('[getUnitJobs] Unexpected exception:', err)
+    throw err
   }
-
-  return (data ?? []) as unknown as ProductionJobWithLocation[]
 }
 
 /**
  * Returns a single production job for a given unit, or null if not found.
- * The .eq('unit_id', unitId) guard ensures units cannot access other units' jobs.
+ * Filters by BOTH job id AND unit_id — prevents cross-unit data access.
+ * Uses admin client so the locations join resolves regardless of RLS state.
  */
 export async function getJobForUnit(
   jobId: string,
   unitId: string
 ): Promise<ProductionJobWithLocation | null> {
-  const supabase = createClient()
+  try {
+    const admin = createAdminClient()
 
-  const { data, error } = await supabase
-    .from('production_jobs')
-    .select(`
-      id,
-      location_id,
-      survey_id,
-      unit_id,
-      assigned_by,
-      assigned_at,
-      qty_tiles,
-      qty_toilet_units,
-      qty_ramp_units,
-      qty_fittings,
-      qty_other,
-      progress_pct,
-      status,
-      production_notes,
-      completed_at,
-      dispatched_at,
-      location:locations(id, location_code, name, district, block, village, status)
-    `)
-    .eq('id', jobId)
-    .eq('unit_id', unitId)
-    .single()
+    const { data, error } = await admin
+      .from('production_jobs')
+      .select(JOB_SELECT)
+      .eq('id', jobId)
+      .eq('unit_id', unitId)  // ownership check — unit cannot access other units' jobs
+      .single()
 
-  if (error) {
-    if (error.code !== 'PGRST116') {
-      console.error('[getJobForUnit]', error.message)
+    if (error) {
+      if (error.code === 'PGRST116') {
+        console.log(`[getJobForUnit] Job ${jobId} not found for unit ${unitId}`)
+        return null
+      }
+      console.error(
+        '[getJobForUnit] Supabase query failed:',
+        { code: error.code, message: error.message, hint: error.hint, jobId, unitId }
+      )
+      return null
     }
+
+    const job = data as unknown as ProductionJobWithLocation
+    if (!job.location) {
+      console.error(
+        `[getJobForUnit] Job ${jobId} returned null location. ` +
+        `location_id ${(data as { location_id: string }).location_id} has no matching row in locations.`
+      )
+    }
+
+    return job
+  } catch (err) {
+    console.error('[getJobForUnit] Unexpected exception:', err)
     return null
   }
-
-  return data as unknown as ProductionJobWithLocation
 }
