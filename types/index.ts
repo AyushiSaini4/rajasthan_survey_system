@@ -1,3 +1,81 @@
+// ─── Vendor ───────────────────────────────────────────────────────────────────
+
+export type VendorType =
+  | 'raw_materials'
+  | 'tiles'
+  | 'sanitary_fittings'
+  | 'construction_hardware'
+  | 'transport'
+  | 'other'
+
+export type VendorStatus = 'active' | 'inactive' | 'pending_review'
+
+export type BankAccountType = 'savings' | 'current'
+
+export interface Vendor {
+  id: string
+  company_name: string
+  vendor_type: VendorType
+  contact_person: string
+  phone: string
+  email: string | null
+  website: string | null
+  address: string
+  district: string
+  state: string
+  pincode: string
+  gst_number: string | null
+  pan_number: string | null
+  bank_name: string
+  bank_account_holder: string
+  bank_account_number: string
+  bank_ifsc: string
+  bank_account_type: BankAccountType
+  supply_categories: string[]
+  notes: string | null
+  status: VendorStatus
+  created_by: string
+  created_at: string
+}
+
+export interface VendorOnboardingFormData {
+  // Section 1 — Business Info
+  company_name: string
+  vendor_type: VendorType
+  registration_number: string
+
+  // Section 2 — Contact
+  contact_person: string
+  phone: string
+  email: string
+  website: string
+
+  // Section 3 — Address
+  address: string
+  district: string
+  city: string
+  state: string
+  pincode: string
+
+  // Section 4 — Tax & Compliance
+  gst_number: string
+  pan_number: string
+
+  // Section 5 — Bank Details
+  bank_name: string
+  bank_account_holder: string
+  bank_account_number: string
+  bank_account_number_confirm: string
+  bank_ifsc: string
+  bank_account_type: BankAccountType
+
+  // Section 6 — Supply Categories
+  supply_categories: string[]
+
+  // Section 7 — Notes
+  notes: string
+}
+
 // ─── User Roles ──────────────────────────────────────────────────────────────
 
 export type UserRole =
