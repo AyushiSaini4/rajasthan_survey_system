@@ -179,6 +179,7 @@ export default function LoginPage() {
         <p className="text-center text-xs text-gray-400">
           Rajasthan — 1,250 locations · RJ-0001 to RJ-1250
         </p>
+<p className="text-center text-sm text-gray-500 mt-2">Don&apos;t have an account? <a href="/signup" className="font-medium text-blue-600 hover:underline">Sign up</a></p>
       </div>
     </main>
   )

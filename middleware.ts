@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 // Routes that never require authentication
-const PUBLIC_ROUTES = ['/login']
+const PUBLIC_ROUTES = ['/login', '/signup']
 
 // Role → dashboard mapping (kept here so middleware imports nothing from /lib)
 const ROLE_DASHBOARDS: Record<string, string> = {
