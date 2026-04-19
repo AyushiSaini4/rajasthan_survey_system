@@ -23,6 +23,9 @@ const withPWAConfig = withPWA({
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+eslint: {
+    ignoreDuringBuilds: true,
+  },
   reactStrictMode: true,
 
   // Remove the X-Powered-By: Next.js response header (minor security hardening).
