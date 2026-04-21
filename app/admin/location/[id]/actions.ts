@@ -94,3 +94,32 @@ export async function assignLocationToUnit(
 
   return { success: true }
 }
+
+// ─── Assign a field agent to a location ──────────────────────────────────────
+export async function assignAgentToLocation(
+  locationId: string,
+  agentId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) return { success: false, error: 'Not authenticated' }
+  const role = user.app_metadata?.role as string | undefined
+  if (role !== 'admin') return { success: false, error: 'Forbidden — admin only' }
+
+  const admin = createAdminClient()
+
+  const { error: locationError } = await admin
+    .from('locations')
+    .update({ assigned_agent: agentId })
+    .eq('id', locationId)
+
+  if (locationError) {
+    console.error('[assignAgentToLocation] error:', locationError.message)
+    return { success: false, error: 'Failed to assign agent' }
+  }
+
+  revalidatePath(`/admin/location/${locationId}`)
+  revalidatePath('/admin/dashboard')
+  return { success: true }
+}

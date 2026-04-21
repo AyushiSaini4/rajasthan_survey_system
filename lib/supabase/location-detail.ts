@@ -122,3 +122,13 @@ export async function getLocationDetailData(id: string): Promise<LocationDetailD
     qcInspections,
   }
 }
+
+// ─── Fetch all field agents (for admin assign dropdown) ───────────────────────
+export async function getFieldAgents(): Promise<{ id: string; email: string }[]> {
+  const admin = createAdminClient()
+  const { data, error } = await admin.auth.admin.listUsers()
+  if (error || !data) return []
+  return data.users
+    .filter(u => u.app_metadata?.role === 'field_agent')
+    .map(u => ({ id: u.id, email: u.email ?? u.id }))
+}
