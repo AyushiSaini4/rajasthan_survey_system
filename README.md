@@ -3,7 +3,7 @@
 A production-grade Progressive Web App built to manage infrastructure surveys, manufacturing, QC, delivery, installation, and payment workflows across **1,250 schools and care facilities in Rajasthan, India**.
 
 ## Live Demo
-> Coming soon (deploying to Vercel)
+> **[https://rajasthan-survey-system-7fsm.vercel.app](https://rajasthan-survey-system-7fsm.vercel.app)**
 
 ## What It Does
 
