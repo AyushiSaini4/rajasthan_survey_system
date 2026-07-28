@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { getUserWithRole } from '@/lib/supabase/auth'
 import { getAllContracts, type ContractWithLocation } from '@/lib/supabase/payments'
 import type { PaymentTranche } from '@/types'
+import DeleteContractButton from '@/components/payments/DeleteContractButton'
 
 export const dynamic = 'force-dynamic'
 
@@ -98,13 +99,14 @@ function ContractCard({ contract }: { contract: ContractWithLocation }) {
       </div>
 
       {/* Footer link */}
-      <div className="border-t border-gray-100 px-5 py-3">
+      <div className="border-t border-gray-100 px-5 py-3 flex items-center justify-between">
         <Link
           href={`/admin/payments/${contract.id}`}
           className="text-sm text-blue-600 hover:text-blue-700 font-medium"
         >
           View contract & manage tranches →
         </Link>
+        <DeleteContractButton contractId={contract.id} supplierName={contract.supplier_name} />
       </div>
     </div>
   )

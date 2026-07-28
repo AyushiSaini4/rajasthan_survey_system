@@ -16,6 +16,7 @@ export default function UnitsManagement() {
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ name: '', district: '', contact_name: '', contact_phone: '' })
   const [error, setError] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const supabase = createClient()
 
   async function fetchUnits() {
@@ -41,6 +42,14 @@ export default function UnitsManagement() {
 
   async function toggleActive(unit: Unit) {
     await supabase.from('manufacturing_units').update({ is_active: !unit.is_active }).eq('id', unit.id)
+    fetchUnits()
+  }
+
+  async function handleDelete(unit: Unit) {
+    if (!confirm(`Delete "${unit.name}"? This cannot be undone.`)) return
+    setDeletingId(unit.id)
+    await supabase.from('manufacturing_units').delete().eq('id', unit.id)
+    setDeletingId(null)
     fetchUnits()
   }
 
@@ -93,7 +102,7 @@ export default function UnitsManagement() {
           <div className="bg-white rounded-xl shadow-sm ring-1 ring-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>{['Unit Name','District','Contact','Phone','Status','Action'].map(h => (
+                <tr>{['Unit Name','District','Contact','Phone','Status','Actions'].map(h => (
                   <th key={h} className="text-left px-4 py-3 font-semibold text-gray-600">{h}</th>
                 ))}</tr>
               </thead>
@@ -109,9 +118,16 @@ export default function UnitsManagement() {
                         {unit.is_active ? '● Active' : '● Inactive'}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 flex items-center gap-3">
                       <button onClick={() => toggleActive(unit)} className="text-xs text-blue-600 hover:underline font-medium">
                         {unit.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button
+                        onClick={() => handleDelete(unit)}
+                        disabled={deletingId === unit.id}
+                        className="text-xs text-red-500 hover:text-red-700 hover:underline font-medium disabled:opacity-50"
+                      >
+                        {deletingId === unit.id ? 'Deleting…' : 'Delete'}
                       </button>
                     </td>
                   </tr>
