@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SNIS Rajasthan — Special Needs Infrastructure Survey System
 
-## Getting Started
+A production-grade Progressive Web App built to manage infrastructure surveys, manufacturing, QC, delivery, installation, and payment workflows across **1,250 schools and care facilities in Rajasthan, India**.
 
-First, run the development server:
+## Live Demo
+> Coming soon (deploying to Vercel)
+
+## What It Does
+
+- **Field Agents** conduct on-site surveys with photo capture and GPS tagging — works fully **offline** with background sync via IndexedDB
+- **Manufacturing Units** receive and manage production jobs assigned by admins
+- **QC Inspectors** verify completed jobs and generate **PDF quality reports** with digital signatures
+- **Admin** manages locations, units, payment contracts, and tranche releases
+- **Verifiers** do final sign-off before payment is released
+
+## Standout Features
+
+- **Offline-first PWA** — field agents in low-connectivity areas can complete surveys offline; data syncs automatically when back online (IndexedDB + next-pwa)
+- **PDF report generation** — QC reports with digital signature capture exported via @react-pdf/renderer
+- **Role-based access control** — 5 distinct roles with Supabase RLS policies enforcing data boundaries
+- **Payment tranche logic** — multi-stage contract payment system with locked/unlocked/released states
+- **1,250 seeded locations** — real Rajasthan location data (RJ-0001 to RJ-1250)
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | Next.js 14 (App Router), TypeScript, Tailwind CSS |
+| Backend | Supabase (Postgres, Auth, Row-Level Security) |
+| Offline | IndexedDB (idb), next-pwa |
+| Forms | react-hook-form + zod |
+| PDF | @react-pdf/renderer |
+| Signatures | react-signature-canvas |
+| Deployment | Vercel |
+
+## Roles
+
+| Role | Access |
+|------|--------|
+| `admin` | Full system access, manage units, payments, reports |
+| `field_agent` | Survey submission, delivery & installation confirmation |
+| `manufacturing_unit` | View and update assigned production jobs |
+| `qc_inspector` | QC verification, PDF report generation |
+| `verifier` | Final verification sign-off |
+
+## Local Setup
+
+```bash
+git clone https://github.com/AyushiSaini4/Rajasthan_survey_system
+cd Rajasthan_survey_system
+npm install
+```
+
+Create `.env.local`:
+```
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+```
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Open [http://localhost:3000](http://localhost:3000)
