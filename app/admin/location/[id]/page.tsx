@@ -6,6 +6,7 @@ import LocationStatusBadge from '@/components/shared/LocationStatusBadge'
 import AssignUnitSection from '@/components/admin/AssignUnitSection'
 import AssignAgentSection from '@/components/admin/AssignAgentSection'
 import type { QCInspection } from '@/types'
+import { QUESTIONNAIRE, MANDATORY_PHOTO_SLOTS } from '@/lib/survey/questionnaire'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,7 +85,11 @@ export default async function LocationDetailPage({ params }: Props) {
 
   if (!data) notFound()
 
-  const { location, survey, surveyPhotoUrls, activeUnits, productionJob, assignedUnit, qcInspections } = data
+  const {
+    location, survey, surveyPhotoUrls, namedPhotoUrls, layoutMapPhotoUrls,
+    gpsAccuracyScreenshotUrl, teamSignatureUrl, authoritySignatureUrl,
+    activeUnits, productionJob, assignedUnit, qcInspections,
+  } = data
 
   return (
     <div className="max-w-4xl mx-auto space-y-5 pb-12">
@@ -135,52 +140,89 @@ export default async function LocationDetailPage({ params }: Props) {
       </Section>
 
       {survey ? (
-        <Section title="Survey Data">
-          <div className="space-y-5">
+        <Section title="Survey Data — CWSN Questionnaire">
+          <div className="space-y-6">
             <InfoGrid rows={[
               ['Submitted', formatDate(survey.submitted_at)],
               ['Synced', formatDate(survey.synced_at)],
-              ['GPS (survey)', (survey.gps_lat && survey.gps_lng) ? `${survey.gps_lat.toFixed(6)}, ${survey.gps_lng.toFixed(6)}` : null],
-              ['GPS accuracy', survey.gps_accuracy ? `${survey.gps_accuracy.toFixed(0)} m` : null],
+              ['GPS — toilet location', (survey.gps_lat && survey.gps_lng) ? `${survey.gps_lat.toFixed(6)}, ${survey.gps_lng.toFixed(6)}` : null],
+              ['GPS accuracy — toilet', survey.gps_accuracy ? `${survey.gps_accuracy.toFixed(0)} m` : null],
+              ['GPS — ramp start/end', (survey.ramp_gps_lat && survey.ramp_gps_lng) ? `${survey.ramp_gps_lat.toFixed(6)}, ${survey.ramp_gps_lng.toFixed(6)}` : null],
+              ['GPS accuracy — ramp', survey.ramp_gps_accuracy ? `${survey.ramp_gps_accuracy.toFixed(0)} m` : null],
               ['Offline submission', survey.is_offline_submission ? 'Yes' : 'No'],
             ]} />
-            <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Infrastructure Checklist</h3>
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 text-left">
-                    <th className="px-3 py-2 text-xs font-medium text-gray-500 border border-gray-200">Item</th>
-                    <th className="px-3 py-2 text-xs font-medium text-gray-500 border border-gray-200">Present</th>
-                    <th className="px-3 py-2 text-xs font-medium text-gray-500 border border-gray-200">Condition</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr><td className="px-3 py-2 border border-gray-200 font-medium">Toilet</td><td className="px-3 py-2 border border-gray-200"><BoolCell value={survey.toilet_present} /></td><td className="px-3 py-2 border border-gray-200"><ConditionBadge value={survey.toilet_condition} /></td></tr>
-                  <tr className="bg-gray-50"><td className="px-3 py-2 border border-gray-200 font-medium">Ramp</td><td className="px-3 py-2 border border-gray-200"><BoolCell value={survey.ramp_present} /></td><td className="px-3 py-2 border border-gray-200"><ConditionBadge value={survey.ramp_condition} /></td></tr>
-                  <tr><td className="px-3 py-2 border border-gray-200 font-medium">Hardware / Fittings</td><td className="px-3 py-2 border border-gray-200">—</td><td className="px-3 py-2 border border-gray-200"><ConditionBadge value={survey.hardware_condition} /></td></tr>
-                </tbody>
-              </table>
-            </div>
-            <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Material Quantities Required</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[['Tiles (sq ft)', survey.qty_tiles],['Toilet Units', survey.qty_toilet_units],['Ramp Units', survey.qty_ramp_units],['Fitting Sets', survey.qty_fittings]].map(([label, value]) => (
-                  <div key={label as string} className="bg-gray-50 rounded-lg p-3 text-center border border-gray-200">
-                    <p className="text-2xl font-bold text-gray-900">{value ?? '—'}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{label}</p>
-                  </div>
-                ))}
+
+            {gpsAccuracyScreenshotUrl && (
+              <a href={gpsAccuracyScreenshotUrl} target="_blank" rel="noreferrer" className="inline-block text-xs text-blue-600 hover:underline">
+                View GPS accuracy screenshot ↗
+              </a>
+            )}
+
+            {/* ── All 15 dynamic questionnaire sections ─────────────────── */}
+            {QUESTIONNAIRE.map((section) => (
+              <div key={section.id}>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{section.title}</h3>
+                <table className="w-full text-sm border-collapse">
+                  <tbody>
+                    {section.fields.map((field, i) => {
+                      const value = survey.answers?.[field.id]
+                      return (
+                        <tr key={field.id} className={i % 2 === 0 ? '' : 'bg-gray-50'}>
+                          <td className="px-3 py-2 border border-gray-200 font-medium text-gray-700 w-1/2">{field.label}</td>
+                          <td className="px-3 py-2 border border-gray-200 text-gray-900">
+                            {typeof value === 'boolean' ? <BoolCell value={value} /> : (value ?? <span className="text-gray-400">—</span>)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
-            </div>
-            {survey.notes && (
+            ))}
+
+            {/* ── Section 11 — Braille layout map ──────────────────────────── */}
+            {layoutMapPhotoUrls.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Notes</h3>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap bg-gray-50 rounded p-3 border border-gray-200">{survey.notes}</p>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Section 11 — Braille Layout Map</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {layoutMapPhotoUrls.map((url, i) => (
+                    <a key={i} href={url} target="_blank" rel="noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`Layout map ${i + 1}`} className="w-full h-36 object-cover rounded-lg border border-gray-200 hover:opacity-90 transition-opacity" />
+                    </a>
+                  ))}
+                </div>
               </div>
             )}
+
+            {/* ── Section 15 — mandatory named photos ──────────────────────── */}
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Section 15 — Photo Documentation ({Object.keys(namedPhotoUrls).length}/10)
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                {MANDATORY_PHOTO_SLOTS.map((slot, i) => {
+                  const url = namedPhotoUrls[slot.id]
+                  return (
+                    <div key={slot.id} className="text-center">
+                      {url ? (
+                        <a href={url} target="_blank" rel="noreferrer">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={url} alt={slot.label} className="w-full aspect-square object-cover rounded-lg border border-gray-200 hover:opacity-90 transition-opacity" />
+                        </a>
+                      ) : (
+                        <div className="w-full aspect-square rounded-lg border border-dashed border-gray-300 flex items-center justify-center text-gray-300 text-xs">Missing</div>
+                      )}
+                      <p className="text-[10px] text-gray-500 mt-1 leading-tight">{i + 1}. {slot.label}</p>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
             {surveyPhotoUrls.length > 0 && (
               <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Photos ({surveyPhotoUrls.length})</h3>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Additional Photos ({surveyPhotoUrls.length})</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {surveyPhotoUrls.map((url, i) => (
                     <a key={i} href={url} target="_blank" rel="noreferrer">
@@ -191,6 +233,35 @@ export default async function LocationDetailPage({ params }: Props) {
                 </div>
               </div>
             )}
+
+            {/* ── Section 17 — Declaration ──────────────────────────────────── */}
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Section 17 — Declaration</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Survey Team</p>
+                  <InfoGrid rows={[
+                    ['Name', survey.team_name],
+                    ['Date', survey.declaration_date],
+                  ]} />
+                  {teamSignatureUrl && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={teamSignatureUrl} alt="Team signature" className="mt-2 h-16 border border-gray-200 rounded bg-white" />
+                  )}
+                </div>
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">School Authority</p>
+                  <InfoGrid rows={[
+                    ['Name', survey.authority_name],
+                    ['Designation', survey.authority_designation],
+                  ]} />
+                  {authoritySignatureUrl && (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={authoritySignatureUrl} alt="Authority signature" className="mt-2 h-16 border border-gray-200 rounded bg-white" />
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </Section>
       ) : (

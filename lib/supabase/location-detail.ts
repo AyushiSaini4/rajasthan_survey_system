@@ -28,6 +28,12 @@ export interface LocationDetailData {
   location: Location
   survey: Survey | null
   surveyPhotoUrls: string[]
+  /** Section 15 mandatory photos, keyed by slot id → signed URL */
+  namedPhotoUrls: Record<string, string>
+  layoutMapPhotoUrls: string[]
+  gpsAccuracyScreenshotUrl: string | null
+  teamSignatureUrl: string | null
+  authoritySignatureUrl: string | null
   activeUnits: ManufacturingUnit[]
   productionJob: ProductionJob | null
   assignedUnit: ManufacturingUnit | null
@@ -107,15 +113,45 @@ export async function getLocationDetailData(id: string): Promise<LocationDetailD
     assignedUnit = unitData ? (unitData as unknown as ManufacturingUnit) : null
   }
 
-  // ── 5. Signed photo URLs for survey photos ────────────────────────────────
+  // ── 5. Signed photo URLs for survey media ──────────────────────────────────
   const surveyPhotoUrls = survey?.photos?.length
     ? await signPhotoPaths(survey.photos, 'survey-media')
     : []
+
+  const layoutMapPhotoUrls = survey?.layout_map_photos?.length
+    ? await signPhotoPaths(survey.layout_map_photos, 'survey-media')
+    : []
+
+  const namedPhotoUrls: Record<string, string> = {}
+  if (survey?.named_photos && Object.keys(survey.named_photos).length > 0) {
+    const slotIds = Object.keys(survey.named_photos)
+    const paths = slotIds.map((id) => survey.named_photos[id])
+    const urls = await signPhotoPaths(paths, 'survey-media')
+    slotIds.forEach((id, i) => {
+      if (urls[i]) namedPhotoUrls[id] = urls[i]
+    })
+  }
+
+  const singleFileUrls = await signPhotoPaths(
+    [survey?.gps_accuracy_screenshot, survey?.team_signature, survey?.authority_signature].filter(
+      (p): p is string => Boolean(p),
+    ),
+    'survey-media',
+  )
+  let cursor = 0
+  const gpsAccuracyScreenshotUrl = survey?.gps_accuracy_screenshot ? singleFileUrls[cursor++] ?? null : null
+  const teamSignatureUrl = survey?.team_signature ? singleFileUrls[cursor++] ?? null : null
+  const authoritySignatureUrl = survey?.authority_signature ? singleFileUrls[cursor++] ?? null : null
 
   return {
     location,
     survey,
     surveyPhotoUrls,
+    namedPhotoUrls,
+    layoutMapPhotoUrls,
+    gpsAccuracyScreenshotUrl,
+    teamSignatureUrl,
+    authoritySignatureUrl,
     activeUnits,
     productionJob,
     assignedUnit,

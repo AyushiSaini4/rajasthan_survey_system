@@ -2,25 +2,51 @@
 
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import type { Answers } from '@/lib/survey/questionnaire'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/**
+ * Tags each entry in `photoPaths` so the server can route it to the right
+ * column after upload. Built client-side in the same order photos were
+ * compressed/uploaded — see SurveyFormClient's `buildPhotoManifest`.
+ */
+export type PhotoKind = 'mandatory' | 'additional' | 'layoutmap' | 'gpsaccuracy' | 'signature'
+
+export interface PhotoMeta {
+  kind: PhotoKind
+  /** Slot id for 'mandatory' (see MANDATORY_PHOTO_SLOTS) or 'team'/'authority' for 'signature'. */
+  slotId?: string
+}
+
 export interface SurveySubmission {
-  locationId:       string
-  gpsLat:           number | null
-  gpsLng:           number | null
-  gpsAccuracy:      number | null
-  toiletPresent:    boolean
-  toiletCondition:  'good' | 'damaged' | 'missing' | null
-  rampPresent:      boolean
-  rampCondition:    'good' | 'damaged' | 'missing' | null
-  hardwareCondition: 'good' | 'damaged' | 'missing'
-  notes:            string
-  qtyTiles:         number
-  qtyToiletUnits:   number
-  qtyRampUnits:     number
-  qtyFittings:      number
-  photoPaths:       string[]
+  locationId: string
+
+  // Section 3 — GPS (toilet location)
+  gpsLat: number | null
+  gpsLng: number | null
+  gpsAccuracy: number | null
+
+  // Section 3 — GPS (ramp start/end)
+  rampGpsLat: number | null
+  rampGpsLng: number | null
+  rampGpsAccuracy: number | null
+
+  // Sections 1–2, 4–14, 16
+  answers: Answers
+
+  // Sections 15, 11 (layout map), 3 (accuracy screenshot), 17 (signatures) —
+  // all photos travel together as one ordered list + parallel metadata so
+  // the offline queue (which only knows how to store generic File[]) never
+  // needs to understand the questionnaire's structure.
+  photoPaths: string[]
+  photoMeta: PhotoMeta[]
+
+  // Section 17 — Declaration
+  teamName: string
+  authorityName: string
+  authorityDesignation: string
+  declarationDate: string
 }
 
 export type SurveyResult =
@@ -36,8 +62,10 @@ export type SurveyResult =
  * 1. Verify auth (server client uses the user's JWT cookie)
  * 2. Verify the location is assigned to this agent (via RLS on server client)
  * 3. Guard against duplicate submissions (status !== 'pending')
- * 4. INSERT into surveys (field_agent has INSERT via RLS)
- * 5. UPDATE locations.status → 'surveyed' (requires admin client — field_agent
+ * 4. Reconstruct structured photo fields (named_photos, layout map,
+ *    gps accuracy screenshot, signatures) from the flat photoPaths/photoMeta
+ * 5. INSERT into surveys (field_agent has INSERT via RLS)
+ * 6. UPDATE locations.status → 'surveyed' (requires admin client — field_agent
  *    does not have UPDATE on locations per RLS policy)
  */
 export async function submitSurvey(data: SurveySubmission): Promise<SurveyResult> {
@@ -75,28 +103,65 @@ export async function submitSurvey(data: SurveySubmission): Promise<SurveyResult
     }
   }
 
-  // ── 4. Insert survey record ────────────────────────────────────────────────
+  // ── 4. Reconstruct structured photo fields from the flat list ──────────────
+  const namedPhotos: Record<string, string> = {}
+  const additionalPhotos: string[] = []
+  const layoutMapPhotos: string[] = []
+  let gpsAccuracyScreenshot: string | null = null
+  let teamSignature: string | null = null
+  let authoritySignature: string | null = null
+
+  data.photoPaths.forEach((path, i) => {
+    const meta = data.photoMeta[i]
+    if (!meta) return
+    switch (meta.kind) {
+      case 'mandatory':
+        if (meta.slotId) namedPhotos[meta.slotId] = path
+        break
+      case 'additional':
+        additionalPhotos.push(path)
+        break
+      case 'layoutmap':
+        layoutMapPhotos.push(path)
+        break
+      case 'gpsaccuracy':
+        gpsAccuracyScreenshot = path
+        break
+      case 'signature':
+        if (meta.slotId === 'team') teamSignature = path
+        if (meta.slotId === 'authority') authoritySignature = path
+        break
+    }
+  })
+
+  // ── 5. Insert survey record ────────────────────────────────────────────────
   const { error: surveyError } = await supabase.from('surveys').insert({
-    location_id:        data.locationId,
-    agent_id:           user.id,
-    gps_lat:            data.gpsLat,
-    gps_lng:            data.gpsLng,
-    gps_accuracy:       data.gpsAccuracy,
-    toilet_present:     data.toiletPresent,
-    // Only store condition when the item is present
-    toilet_condition:   data.toiletPresent  ? data.toiletCondition  : null,
-    ramp_present:       data.rampPresent,
-    ramp_condition:     data.rampPresent    ? data.rampCondition    : null,
-    hardware_condition: data.hardwareCondition,
-    notes:              data.notes.trim() || null,
-    qty_tiles:          data.qtyTiles,
-    qty_toilet_units:   data.qtyToiletUnits,
-    qty_ramp_units:     data.qtyRampUnits,
-    qty_fittings:       data.qtyFittings,
-    photos:             data.photoPaths,
-    videos:             [],
+    location_id: data.locationId,
+    agent_id: user.id,
+
+    gps_lat: data.gpsLat,
+    gps_lng: data.gpsLng,
+    gps_accuracy: data.gpsAccuracy,
+    ramp_gps_lat: data.rampGpsLat,
+    ramp_gps_lng: data.rampGpsLng,
+    ramp_gps_accuracy: data.rampGpsAccuracy,
+    gps_accuracy_screenshot: gpsAccuracyScreenshot,
+
+    answers: data.answers,
+    named_photos: namedPhotos,
+    photos: additionalPhotos,
+    layout_map_photos: layoutMapPhotos,
+    videos: [],
+
+    team_name: data.teamName.trim() || null,
+    team_signature: teamSignature,
+    authority_name: data.authorityName.trim() || null,
+    authority_designation: data.authorityDesignation.trim() || null,
+    authority_signature: authoritySignature,
+    declaration_date: data.declarationDate || null,
+
     is_offline_submission: false,
-    synced_at:          new Date().toISOString(),
+    synced_at: new Date().toISOString(),
   })
 
   if (surveyError) {
@@ -104,7 +169,7 @@ export async function submitSurvey(data: SurveySubmission): Promise<SurveyResult
     return { success: false, error: 'Failed to save survey data. Please try again.' }
   }
 
-  // ── 5. Update location status → 'surveyed' ────────────────────────────────
+  // ── 6. Update location status → 'surveyed' ────────────────────────────────
   // Admin client required: field_agent RLS does not include UPDATE on locations.
   const adminClient = createAdminClient()
   const { error: updateError } = await adminClient

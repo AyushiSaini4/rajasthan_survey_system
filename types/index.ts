@@ -148,22 +148,36 @@ export interface Survey {
   agent_id: string
   submitted_at: string
   synced_at: string | null
+
+  // Section 3 — GPS (toilet location + ramp start/end)
   gps_lat: number | null
   gps_lng: number | null
   gps_accuracy: number | null
-  toilet_present: boolean | null
-  toilet_condition: 'good' | 'damaged' | 'missing' | null
-  ramp_present: boolean | null
-  ramp_condition: 'good' | 'damaged' | 'missing' | null
-  hardware_condition: 'good' | 'damaged' | 'missing' | null
-  notes: string | null
-  qty_tiles: number | null
-  qty_toilet_units: number | null
-  qty_ramp_units: number | null
-  qty_fittings: number | null
-  qty_other: Record<string, number> | null
+  ramp_gps_lat: number | null
+  ramp_gps_lng: number | null
+  ramp_gps_accuracy: number | null
+  gps_accuracy_screenshot: string | null
+
+  // Sections 1–2, 4–14, 16 — full CWSN questionnaire answers
+  // (see lib/survey/questionnaire.ts for the field-id schema)
+  answers: Record<string, string | boolean | number | null>
+
+  // Section 15 — the 10 mandatory named photo angles, keyed by slot id
+  named_photos: Record<string, string>
+  // Additional supporting photos (obstacles, ramp alignment, etc.)
   photos: string[]
   videos: string[]
+  // Section 11 — Braille layout map attachments
+  layout_map_photos: string[]
+
+  // Section 17 — Declaration
+  team_name: string | null
+  team_signature: string | null
+  authority_name: string | null
+  authority_designation: string | null
+  authority_signature: string | null
+  declaration_date: string | null
+
   is_offline_submission: boolean
 }
 
