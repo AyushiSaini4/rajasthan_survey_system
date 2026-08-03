@@ -196,12 +196,17 @@ export default function SurveyFormClient({ location }: Props) {
         photoMeta.push({ kind: 'gpsaccuracy' })
       }
 
+      // Note: intentionally using toDataURL() directly rather than
+      // getTrimmedCanvas().toDataURL() — the trim-canvas sub-dependency of
+      // react-signature-canvas doesn't bundle cleanly under this project's
+      // webpack setup (see SignaturePadWidget.tsx / QCInspectionForm.tsx,
+      // which use the same untrimmed pattern).
       const teamSigFile = dataUrlToFile(
-        teamSigRef.current!.getTrimmedCanvas().toDataURL('image/png'),
+        teamSigRef.current!.toDataURL('image/png'),
         'team_signature.png',
       )
       const authoritySigFile = dataUrlToFile(
-        authoritySigRef.current!.getTrimmedCanvas().toDataURL('image/png'),
+        authoritySigRef.current!.toDataURL('image/png'),
         'authority_signature.png',
       )
       orderedFiles.push(teamSigFile)
