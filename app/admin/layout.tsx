@@ -6,7 +6,6 @@ const NAV_LINKS = [
   { href: '/admin/units',          label: 'Units' },
   { href: '/admin/qc',             label: 'QC' },
   { href: '/admin/qc-inspectors',  label: 'QC Inspectors' },
-  { href: '/admin/payments',       label: 'Payments' },
   { href: '/admin/reports',        label: 'Reports' },
 ]
 

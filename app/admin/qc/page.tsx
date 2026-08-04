@@ -75,7 +75,7 @@ export default function AdminQC() {
           <div className="bg-white rounded-xl shadow-sm ring-1 ring-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>{['Location','District','Unit','Insp #','Date','Result','Notes'].map(h => (
+                <tr>{['Location','District','Unit','Insp #','Date','Result','Notes',''].map(h => (
                   <th key={h} className="text-left px-4 py-3 font-semibold text-gray-600">{h}</th>
                 ))}</tr>
               </thead>
@@ -98,6 +98,9 @@ export default function AdminQC() {
                       ) : <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">Pending</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs max-w-[120px] truncate">{i.overall_notes ?? '—'}</td>
+                    <td className="px-4 py-3">
+                      <a href={`/admin/qc/${i.id}`} className="text-xs text-blue-600 hover:underline font-medium">View Report →</a>
+                    </td>
                   </tr>
                 ))}
               </tbody>

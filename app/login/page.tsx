@@ -3,11 +3,13 @@ import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Link from 'next/link'
-type Role = 'admin' | 'agent' | 'public'
+type Role = 'admin' | 'agent' | 'unit' | 'qc' | 'public'
 const roles = [
-  { id: 'admin' as Role, label: 'Government Authority', sublabel: 'Admin Portal', color: 'from-blue-600 to-blue-700' },
+  { id: 'admin' as Role, label: 'Agency', sublabel: 'Admin Portal', color: 'from-blue-600 to-blue-700' },
   { id: 'agent' as Role, label: 'Field Agent', sublabel: 'Survey Worker', color: 'from-emerald-600 to-emerald-700' },
-  { id: 'public' as Role, label: 'Public', sublabel: 'View Progress', color: 'from-orange-500 to-orange-600' },
+  { id: 'unit' as Role, label: 'Manufacturing Unit', sublabel: 'Production', color: 'from-purple-600 to-purple-700' },
+  { id: 'qc' as Role, label: 'QC Inspector', sublabel: 'Quality Check', color: 'from-indigo-600 to-indigo-700' },
+  { id: 'public' as Role, label: 'Govt Authority', sublabel: 'View Progress', color: 'from-orange-500 to-orange-600' },
 ]
 export default function LoginPage() {
   const [selectedRole, setSelectedRole] = useState<Role | null>(null)
@@ -68,6 +70,7 @@ export default function LoginPage() {
               </button>
               {selectedRole === 'agent' && <p className="text-center text-xs text-slate-400">New field agent? <Link href="/signup" className="text-slate-200 font-semibold hover:text-white">Create account</Link></p>}
               {selectedRole === 'admin' && <p className="text-center text-xs text-slate-500 mt-2">Admin accounts are created by the system administrator.</p>}
+              {(selectedRole === 'unit' || selectedRole === 'qc') && <p className="text-center text-xs text-slate-500 mt-2">Ask your admin if you don&apos;t have login credentials yet.</p>}
             </form>
           )}
           {!selectedRole && <p className="text-center text-xs text-slate-500 mt-2">Select a role above to continue</p>}

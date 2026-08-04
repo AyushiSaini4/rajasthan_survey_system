@@ -5,6 +5,7 @@ import LocationTimeline from '@/components/admin/LocationTimeline'
 import LocationStatusBadge from '@/components/shared/LocationStatusBadge'
 import AssignUnitSection from '@/components/admin/AssignUnitSection'
 import AssignAgentSection from '@/components/admin/AssignAgentSection'
+import PrintButton from '@/components/admin/PrintButton'
 import type { QCInspection } from '@/types'
 import { QUESTIONNAIRE, MANDATORY_PHOTO_SLOTS } from '@/lib/survey/questionnaire'
 
@@ -28,9 +29,9 @@ function BoolCell({ value }: { value: boolean | null | undefined }) {
   return value ? <span className="text-green-600 font-medium">Yes</span> : <span className="text-red-500 font-medium">No</span>
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, className = '' }: { title: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className="bg-white rounded-lg border border-gray-200">
+    <div className={`bg-white rounded-lg border border-gray-200 ${className}`}>
       <div className="px-5 py-3 border-b border-gray-100">
         <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">{title}</h2>
       </div>
@@ -93,7 +94,7 @@ export default async function LocationDetailPage({ params }: Props) {
 
   return (
     <div className="max-w-4xl mx-auto space-y-5 pb-12">
-      <div>
+      <div className="print:hidden">
         <Link href="/admin/dashboard" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -102,7 +103,7 @@ export default async function LocationDetailPage({ params }: Props) {
         </Link>
       </div>
 
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div className="flex items-start justify-between gap-4 flex-wrap print:hidden">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-mono bg-gray-100 text-gray-600 px-2 py-0.5 rounded">{location.location_code}</span>
@@ -111,6 +112,15 @@ export default async function LocationDetailPage({ params }: Props) {
           <h1 className="text-xl font-bold text-gray-900">{location.name ?? 'Unnamed Location'}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{location.address ?? '—'}</p>
         </div>
+        <PrintButton label="🖨 Print / Export Report" />
+      </div>
+
+      {/* Print-only header — the interactive header above is hidden when printing */}
+      <div className="hidden print:block text-center border-b border-gray-300 pb-4 mb-2">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">SNIS Rajasthan</p>
+        <h1 className="text-xl font-bold text-gray-900 mt-1">Location Report — {location.location_code}</h1>
+        <p className="text-sm text-gray-600 mt-1">{location.name ?? 'Unnamed Location'}</p>
+        <p className="text-xs text-gray-400 mt-1">Status: {location.status} · Generated {new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
       </div>
 
       <LocationTimeline currentStatus={location.status} />
@@ -130,8 +140,8 @@ export default async function LocationDetailPage({ params }: Props) {
         ]} />
       </Section>
 
-      {/* ── Assign Field Agent ── always visible to admin ── */}
-      <Section title="Assign Field Agent">
+      {/* ── Assign Field Agent ── always visible to admin, hidden when printing ── */}
+      <Section title="Assign Field Agent" className="print:hidden">
         <AssignAgentSection
           locationId={location.id}
           agents={agents}
@@ -271,7 +281,7 @@ export default async function LocationDetailPage({ params }: Props) {
       )}
 
       {location.status === 'surveyed' && (
-        <Section title="Assign to Manufacturing Unit">
+        <Section title="Assign to Manufacturing Unit" className="print:hidden">
           <AssignUnitSection locationId={location.id} activeUnits={activeUnits} />
         </Section>
       )}
