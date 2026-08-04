@@ -4,14 +4,53 @@ import { getUserWithRole } from '@/lib/supabase/auth'
 import { getAgentLocations } from '@/lib/supabase/agent'
 import LocationStatusBadge from '@/components/shared/LocationStatusBadge'
 import OfflineSyncBanner from '@/components/agent/OfflineSyncBanner'
-import type { Location } from '@/types'
+import type { Location, LocationStatus } from '@/types'
 
 export const dynamic = 'force-dynamic'
+
+// ─── Action resolution ───────────────────────────────────────────────────────
+//
+// Previously every non-'pending' status rendered the same static "Submitted"
+// checkmark — meaning a field agent had no way to discover or reach the
+// delivery-confirmation and installation-report pages (which are fully built
+// at /agent/delivery/[id] and /agent/install/[id]) once a job reached
+// 'dispatched' or 'delivered'. This maps every status to its correct action.
+
+type CardAction =
+  | { kind: 'link'; href: string; label: string; color: 'green' | 'blue' }
+  | { kind: 'done'; label: string }
+  | { kind: 'waiting'; label: string }
+
+function resolveAction(location: Location): CardAction {
+  switch (location.status as LocationStatus) {
+    case 'pending':
+      return { kind: 'link', href: `/agent/survey/${location.id}`, label: 'Survey', color: 'green' }
+    case 'dispatched':
+      return { kind: 'link', href: `/agent/delivery/${location.id}`, label: 'Confirm Delivery', color: 'blue' }
+    case 'delivered':
+      return { kind: 'link', href: `/agent/install/${location.id}`, label: 'Installation Report', color: 'blue' }
+    case 'installed':
+    case 'verified':
+    case 'closed':
+      return { kind: 'done', label: location.status === 'installed' ? 'Awaiting verification' : 'Complete' }
+    case 'qc_failed':
+      return { kind: 'waiting', label: 'Rework in progress' }
+    case 'surveyed':
+    case 'assigned':
+      return { kind: 'waiting', label: 'Awaiting production' }
+    case 'in_production':
+      return { kind: 'waiting', label: 'In production' }
+    case 'qc_passed':
+      return { kind: 'waiting', label: 'Awaiting dispatch' }
+    default:
+      return { kind: 'waiting', label: 'In progress' }
+  }
+}
 
 // ─── Location card ─────────────────────────────────────────────────────────────
 
 function LocationCard({ location }: { location: Location }) {
-  const isPending = location.status === 'pending'
+  const action = resolveAction(location)
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
@@ -45,39 +84,33 @@ function LocationCard({ location }: { location: Location }) {
 
         {/* Action */}
         <div className="flex-shrink-0 self-center">
-          {isPending ? (
+          {action.kind === 'link' && (
             <Link
-              href={`/agent/survey/${location.id}`}
-              className="inline-flex items-center gap-1 px-4 py-2 bg-green-600 hover:bg-green-700 active:bg-green-800 text-white text-sm font-semibold rounded-lg transition-colors"
+              href={action.href}
+              className={`inline-flex items-center gap-1 px-4 py-2 text-white text-sm font-semibold rounded-lg transition-colors ${
+                action.color === 'green'
+                  ? 'bg-green-600 hover:bg-green-700 active:bg-green-800'
+                  : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800'
+              }`}
             >
-              Survey
-              <svg
-                className="w-3.5 h-3.5"
-                width={14}
-                height={14}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2.5}
-              >
+              {action.label}
+              <svg className="w-3.5 h-3.5" width={14} height={14} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
               </svg>
             </Link>
-          ) : (
+          )}
+
+          {action.kind === 'done' && (
             <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
-              <svg
-                className="w-4 h-4"
-                width={16}
-                height={16}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2.5}
-              >
+              <svg className="w-4 h-4" width={16} height={16} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
-              Submitted
+              {action.label}
             </span>
+          )}
+
+          {action.kind === 'waiting' && (
+            <span className="text-xs text-gray-400 font-medium">{action.label}</span>
           )}
         </div>
 
@@ -89,8 +122,6 @@ function LocationCard({ location }: { location: Location }) {
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default async function AgentDashboardPage() {
-  // ── Auth guard — wrapped in try/catch so a transient Supabase network error
-  // doesn't bubble up as a hard 500; we redirect to login instead.
   let user: Awaited<ReturnType<typeof getUserWithRole>>['user'] = null
   let role: Awaited<ReturnType<typeof getUserWithRole>>['role'] = null
 
@@ -111,8 +142,12 @@ export default async function AgentDashboardPage() {
     fetchError = 'Could not load your locations. Please refresh the page.'
   }
 
-  const pending = locations.filter((l) => l.status === 'pending')
-  const done    = locations.filter((l) => l.status !== 'pending')
+  const pending      = locations.filter((l) => l.status === 'pending')
+  const actionNeeded = locations.filter((l) => l.status === 'dispatched' || l.status === 'delivered')
+  const inProgress   = locations.filter((l) =>
+    !['pending', 'dispatched', 'delivered', 'installed', 'verified', 'closed'].includes(l.status),
+  )
+  const completed    = locations.filter((l) => ['installed', 'verified', 'closed'].includes(l.status))
 
   return (
     <div>
@@ -127,7 +162,7 @@ export default async function AgentDashboardPage() {
             ? 'Error loading data'
             : locations.length === 0
             ? 'No locations assigned yet'
-            : `${pending.length} pending · ${done.length} completed`}
+            : `${pending.length} pending survey · ${actionNeeded.length} need action · ${completed.length} completed`}
         </p>
       </div>
 
@@ -145,20 +180,8 @@ export default async function AgentDashboardPage() {
             className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3"
             style={{ width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
           >
-            <svg
-              className="w-6 h-6 text-gray-400"
-              width={24}
-              height={24}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-              />
+            <svg className="w-6 h-6 text-gray-400" width={24} height={24} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
           </div>
@@ -169,7 +192,21 @@ export default async function AgentDashboardPage() {
         </div>
       )}
 
-      {/* ── Pending ───────────────────────────────────────────────────────── */}
+      {/* ── Action Needed — dispatched (confirm delivery) / delivered (install report) ── */}
+      {actionNeeded.length > 0 && (
+        <section className="mb-6">
+          <h2 className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-3">
+            Action Needed — {actionNeeded.length}
+          </h2>
+          <div className="space-y-3">
+            {actionNeeded.map((loc) => (
+              <LocationCard key={loc.id} location={loc} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Pending Survey ────────────────────────────────────────────────── */}
       {pending.length > 0 && (
         <section className="mb-6">
           <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
@@ -183,14 +220,28 @@ export default async function AgentDashboardPage() {
         </section>
       )}
 
-      {/* ── Completed ─────────────────────────────────────────────────────── */}
-      {done.length > 0 && (
-        <section>
+      {/* ── In Progress — surveyed/production/QC, nothing for the agent to do yet ── */}
+      {inProgress.length > 0 && (
+        <section className="mb-6">
           <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            Completed — {done.length}
+            In Progress — {inProgress.length}
           </h2>
           <div className="space-y-3">
-            {done.map((loc) => (
+            {inProgress.map((loc) => (
+              <LocationCard key={loc.id} location={loc} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Completed ─────────────────────────────────────────────────────── */}
+      {completed.length > 0 && (
+        <section>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+            Completed — {completed.length}
+          </h2>
+          <div className="space-y-3">
+            {completed.map((loc) => (
               <LocationCard key={loc.id} location={loc} />
             ))}
           </div>
