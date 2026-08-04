@@ -10,6 +10,7 @@ import GPSCapture, { type GPSCoords } from '@/components/survey/GPSCapture'
 import PhotoUploader from '@/components/survey/PhotoUploader'
 import NamedPhotoSlot from '@/components/survey/NamedPhotoSlot'
 import QuestionnaireFieldInput from '@/components/survey/QuestionnaireFieldInput'
+import SchoolSearchCombobox from '@/components/survey/SchoolSearchCombobox'
 import { submitSurvey, type PhotoMeta } from '@/app/agent/survey/actions'
 import { enqueueSurvey, removeSurvey } from '@/lib/offline/surveyQueue'
 import {
@@ -323,15 +324,41 @@ export default function SurveyFormClient({ location }: Props) {
           <SectionTitle>{section.title}</SectionTitle>
           {section.fields
             .filter((f) => !f.showIf || answers[f.showIf.fieldId] === f.showIf.equals)
-            .map((field) => (
-              <QuestionnaireFieldInput
-                key={field.id}
-                field={field}
-                value={answers[field.id] ?? null}
-                onChange={(v) => setAnswer(field.id, v)}
-                disabled={submitting}
-              />
-            ))}
+            // udise_code is captured by SchoolSearchCombobox below, alongside
+            // school_name — drop it from the generic field loop so it isn't
+            // rendered twice.
+            .filter((f) => !(section.id === 'basic_details' && f.id === 'udise_code'))
+            .map((field) => {
+              if (section.id === 'basic_details' && field.id === 'school_name') {
+                return (
+                  <SchoolSearchCombobox
+                    key="school_search"
+                    schoolName={typeof answers.school_name === 'string' ? answers.school_name : ''}
+                    udiseCode={typeof answers.udise_code === 'string' ? answers.udise_code : ''}
+                    onSchoolNameChange={(v) => setAnswer('school_name', v)}
+                    onUdiseCodeChange={(v) => setAnswer('udise_code', v)}
+                    onSelectSchool={(school) => {
+                      setAnswer('school_name', school.school_name)
+                      setAnswer('udise_code', school.udise_code)
+                      // Only backfill — never overwrite what the agent already typed.
+                      // (cwsn_schools has no village column — village/town stays manual.)
+                      if (school.district && !answers.district) setAnswer('district', school.district)
+                      if (school.block && !answers.block) setAnswer('block', school.block)
+                    }}
+                    disabled={submitting}
+                  />
+                )
+              }
+              return (
+                <QuestionnaireFieldInput
+                  key={field.id}
+                  field={field}
+                  value={answers[field.id] ?? null}
+                  onChange={(v) => setAnswer(field.id, v)}
+                  disabled={submitting}
+                />
+              )
+            })}
         </Card>
       ))}
 

@@ -181,6 +181,29 @@ export interface Survey {
   is_offline_submission: boolean
 }
 
+// ─── CWSN School Directory ─────────────────────────────────────────────────────
+// Mirrors the live public.cwsn_schools table (created outside this repo via
+// migrations 0008/0009 — see supabase/migrations/20260805_cwsn_schools_directory.sql).
+
+export interface CWSNSchool {
+  id: string
+  sno: number
+  district: string
+  block: string
+  school_name: string
+  udise_code: string
+  cwsn_toilet_no: number | null
+  ramp_no: number | null
+  tactile_tile_sqft: number | null
+  grab_bar_no: number | null
+  braille_signage_no: number | null
+  braille_layout_plan_no: number | null
+  sanction_amount_lacs: number | null
+  /** Set once this school has entered the survey pipeline — see locations. */
+  location_id: string | null
+  created_at: string
+}
+
 export interface ManufacturingUnit {
   id: string
   name: string
