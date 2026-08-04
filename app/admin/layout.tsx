@@ -2,11 +2,12 @@ import Link from 'next/link'
 import SignOutButton from '@/components/shared/SignOutButton'
 
 const NAV_LINKS = [
-  { href: '/admin/dashboard', label: 'Locations' },
-  { href: '/admin/units',     label: 'Units' },
-  { href: '/admin/qc',        label: 'QC' },
-  { href: '/admin/payments',  label: 'Payments' },
-  { href: '/admin/reports',   label: 'Reports' },
+  { href: '/admin/dashboard',      label: 'Locations' },
+  { href: '/admin/units',          label: 'Units' },
+  { href: '/admin/qc',             label: 'QC' },
+  { href: '/admin/qc-inspectors',  label: 'QC Inspectors' },
+  { href: '/admin/payments',       label: 'Payments' },
+  { href: '/admin/reports',        label: 'Reports' },
 ]
 
 /**
