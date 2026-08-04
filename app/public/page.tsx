@@ -16,7 +16,11 @@ export default function PublicDashboard() {
 
   useEffect(() => {
     async function fetchData() {
-      const { data: locations } = await supabase.from('locations').select('status,district')
+      // Public/anon visitors can't read public.locations directly (RLS —
+      // that table also holds GPS coords, assigned_agent, assigned_unit_id).
+      // public_location_stats is a narrow view exposing only status+district,
+      // granted to the `anon` role — see supabase/migrations/20260804_*.
+      const { data: locations } = await supabase.from('public_location_stats').select('status,district')
       if (!locations) return
       setStats({
         total: locations.length,
