@@ -68,9 +68,12 @@ export default function LoginPage() {
               <button type="submit" disabled={loading} className={`w-full py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r ${activeRole?.color} shadow-lg hover:opacity-90 transition disabled:opacity-50`}>
                 {loading ? 'Signing in…' : `Sign in as ${activeRole?.label}`}
               </button>
-              {selectedRole === 'agent' && <p className="text-center text-xs text-slate-400">New field agent? <Link href="/signup" className="text-slate-200 font-semibold hover:text-white">Create account</Link></p>}
+              {(selectedRole === 'agent' || selectedRole === 'unit' || selectedRole === 'qc') && (
+                <p className="text-center text-xs text-slate-400">
+                  New here? <Link href={`/signup?role=${selectedRole === 'agent' ? 'field_agent' : selectedRole === 'unit' ? 'manufacturing_unit' : 'qc_inspector'}`} className="text-slate-200 font-semibold hover:text-white">Create account</Link>
+                </p>
+              )}
               {selectedRole === 'admin' && <p className="text-center text-xs text-slate-500 mt-2">Admin accounts are created by the system administrator.</p>}
-              {(selectedRole === 'unit' || selectedRole === 'qc') && <p className="text-center text-xs text-slate-500 mt-2">Ask your admin if you don&apos;t have login credentials yet.</p>}
             </form>
           )}
           {!selectedRole && <p className="text-center text-xs text-slate-500 mt-2">Select a role above to continue</p>}
