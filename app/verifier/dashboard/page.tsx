@@ -25,7 +25,7 @@ export default async function VerifierDashboardPage() {
     redirect('/login')
   }
 
-  if (!user || role !== 'verifier') redirect('/login')
+  if (!user || (role !== 'verifier' && role !== 'admin')) redirect('/login')
 
   let reports: Awaited<ReturnType<typeof getPendingInstallationReports>> = []
   try {

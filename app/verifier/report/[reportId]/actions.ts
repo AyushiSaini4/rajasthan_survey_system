@@ -13,7 +13,7 @@ export async function approveInstallationReport(
   verifierNotes: string
 ): Promise<VerifyResult> {
   const { user, role } = await getUserWithRole()
-  if (!user || role !== 'verifier') return { success: false, error: 'Unauthorized' }
+  if (!user || (role !== 'verifier' && role !== 'admin')) return { success: false, error: 'Unauthorized' }
 
   const admin = createAdminClient()
   const now = new Date().toISOString()
@@ -75,7 +75,7 @@ export async function rejectInstallationReport(
   verifierNotes: string
 ): Promise<VerifyResult> {
   const { user, role } = await getUserWithRole()
-  if (!user || role !== 'verifier') return { success: false, error: 'Unauthorized' }
+  if (!user || (role !== 'verifier' && role !== 'admin')) return { success: false, error: 'Unauthorized' }
 
   if (!rejectionReason.trim()) {
     return { success: false, error: 'Rejection reason is required' }

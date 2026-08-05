@@ -54,7 +54,7 @@ export default async function VerifierReportPage({ params }: Props) {
     redirect('/login')
   }
 
-  if (!user || role !== 'verifier') redirect('/login')
+  if (!user || (role !== 'verifier' && role !== 'admin')) redirect('/login')
 
   let report: Awaited<ReturnType<typeof getInstallationReportById>> = null
   try {
