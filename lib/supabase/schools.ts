@@ -32,3 +32,30 @@ export async function getAllCWSNSchools(): Promise<CWSNSchool[]> {
 
   return (data ?? []) as unknown as CWSNSchool[]
 }
+
+// ─── Fetch the sanctioned CWSN school record for one location ─────────────────
+// Used on the admin location detail page to pre-fill production-job quantities
+// with the RCSE sanction figures (the actual source of truth for how many
+// toilet/ramp/tile/etc. units a school was approved for) rather than trying to
+// derive counts from the field survey, which was never designed to capture
+// unit quantities — it records feasibility and measurements, not counts.
+// Returns null for locations with no matching sanctioned school (e.g.
+// Anganwadi Kendras, or schools that simply weren't part of the sanctioned
+// batch — see the cwsn_schools directory coverage discussion).
+
+export async function getSanctionedSchoolForLocation(locationId: string): Promise<CWSNSchool | null> {
+  const supabase = createClient()
+
+  const { data, error } = await supabase
+    .from('cwsn_schools')
+    .select(SCHOOL_SELECT)
+    .eq('location_id', locationId)
+    .maybeSingle()
+
+  if (error) {
+    console.error('[getSanctionedSchoolForLocation] Supabase error:', error.message)
+    return null
+  }
+
+  return data ? (data as unknown as CWSNSchool) : null
+}

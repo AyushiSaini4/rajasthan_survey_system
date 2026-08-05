@@ -1,11 +1,13 @@
 import { createClient } from './server'
 import { createAdminClient } from './admin'
+import { getSanctionedSchoolForLocation } from './schools'
 import type {
   Location,
   Survey,
   ManufacturingUnit,
   ProductionJob,
   QCInspection,
+  CWSNSchool,
 } from '@/types'
 
 // ─── Signed-URL helper ────────────────────────────────────────────────────────
@@ -38,6 +40,10 @@ export interface LocationDetailData {
   productionJob: ProductionJob | null
   assignedUnit: ManufacturingUnit | null
   qcInspections: QCInspection[]
+  /** RCSE sanction record for this school, if it was part of the 1,236-row
+   *  cwsn_schools import — used to pre-fill production-job quantities.
+   *  Null for locations with no sanction match (e.g. Anganwadi Kendras). */
+  sanctionedSchool: CWSNSchool | null
 }
 
 // ─── Main fetcher ─────────────────────────────────────────────────────────────
@@ -60,8 +66,8 @@ export async function getLocationDetailData(id: string): Promise<LocationDetailD
 
   const location = locationData as unknown as Location
 
-  // ── 2. Parallel queries — survey, active units, production job ────────────
-  const [surveyResult, unitsResult, jobResult] = await Promise.all([
+  // ── 2. Parallel queries — survey, active units, production job, sanction ──
+  const [surveyResult, unitsResult, jobResult, sanctionedSchool] = await Promise.all([
     supabase
       .from('surveys')
       .select('*')
@@ -83,6 +89,8 @@ export async function getLocationDetailData(id: string): Promise<LocationDetailD
       .order('assigned_at', { ascending: false })
       .limit(1)
       .maybeSingle(),
+
+    getSanctionedSchoolForLocation(id),
   ])
 
   const survey = surveyResult.data ? (surveyResult.data as unknown as Survey) : null
@@ -156,6 +164,7 @@ export async function getLocationDetailData(id: string): Promise<LocationDetailD
     productionJob,
     assignedUnit,
     qcInspections,
+    sanctionedSchool,
   }
 }
 

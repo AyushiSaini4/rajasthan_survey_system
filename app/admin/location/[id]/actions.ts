@@ -6,14 +6,27 @@ import { revalidatePath } from 'next/cache'
 
 // ─── Assign a location to a manufacturing unit ────────────────────────────────
 // 1. Verifies the requesting user is an admin
-// 2. Loads the location's latest survey to copy quantities
-// 3. Creates a production_jobs row with those quantities
+// 2. Confirms a survey exists for this location (still required before assignment)
+// 3. Creates a production_jobs row using the quantities the admin confirmed in
+//    the UI — pre-filled from cwsn_schools (the RCSE sanction record), NOT from
+//    surveys.qty_* (those columns are never populated by the survey form; the
+//    17-section questionnaire captures feasibility and measurements, not unit
+//    counts, so reading quantities from there was always going to return nulls)
 // 4. Updates location.status → 'assigned' and location.assigned_unit_id
 // All mutations use the admin client (bypasses RLS) after server-side auth check.
 
+export interface AssignQuantities {
+  qtyTiles: number | null
+  qtyToiletUnits: number | null
+  qtyRampUnits: number | null
+  qtyFittings: number | null
+  qtyOther: Record<string, number> | null
+}
+
 export async function assignLocationToUnit(
   locationId: string,
-  unitId: string
+  unitId: string,
+  quantities: AssignQuantities
 ): Promise<{ success: boolean; error?: string }> {
   // ── Auth check ──────────────────────────────────────────────────────────────
   const supabase = createClient()
@@ -28,12 +41,12 @@ export async function assignLocationToUnit(
     return { success: false, error: 'Forbidden — admin only' }
   }
 
-  // ── Fetch survey to copy quantities ─────────────────────────────────────────
+  // ── Confirm a survey exists ─────────────────────────────────────────────────
   const admin = createAdminClient()
 
   const { data: surveyData, error: surveyError } = await admin
     .from('surveys')
-    .select('id, qty_tiles, qty_toilet_units, qty_ramp_units, qty_fittings, qty_other')
+    .select('id')
     .eq('location_id', locationId)
     .order('submitted_at', { ascending: false })
     .limit(1)
@@ -56,11 +69,11 @@ export async function assignLocationToUnit(
       survey_id: surveyData.id,
       unit_id: unitId,
       assigned_by: user.id,
-      qty_tiles: surveyData.qty_tiles,
-      qty_toilet_units: surveyData.qty_toilet_units,
-      qty_ramp_units: surveyData.qty_ramp_units,
-      qty_fittings: surveyData.qty_fittings,
-      qty_other: surveyData.qty_other,
+      qty_tiles: quantities.qtyTiles,
+      qty_toilet_units: quantities.qtyToiletUnits,
+      qty_ramp_units: quantities.qtyRampUnits,
+      qty_fittings: quantities.qtyFittings,
+      qty_other: quantities.qtyOther,
       status: 'pending',
       progress_pct: 0,
     })

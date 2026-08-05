@@ -89,7 +89,7 @@ export default async function LocationDetailPage({ params }: Props) {
   const {
     location, survey, surveyPhotoUrls, namedPhotoUrls, layoutMapPhotoUrls,
     gpsAccuracyScreenshotUrl, teamSignatureUrl, authoritySignatureUrl,
-    activeUnits, productionJob, assignedUnit, qcInspections,
+    activeUnits, productionJob, assignedUnit, qcInspections, sanctionedSchool,
   } = data
 
   return (
@@ -282,7 +282,7 @@ export default async function LocationDetailPage({ params }: Props) {
 
       {location.status === 'surveyed' && (
         <Section title="Assign to Manufacturing Unit" className="print:hidden">
-          <AssignUnitSection locationId={location.id} activeUnits={activeUnits} />
+          <AssignUnitSection locationId={location.id} activeUnits={activeUnits} sanctionedSchool={sanctionedSchool} />
         </Section>
       )}
 
