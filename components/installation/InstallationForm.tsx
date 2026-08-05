@@ -5,10 +5,10 @@ import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import imageCompression from 'browser-image-compression'
 import { createClient } from '@/lib/supabase/client'
-import GPSCapture, { type GPSCoords } from '@/components/survey/GPSCapture'
 import PhotoUploader from '@/components/survey/PhotoUploader'
+import GPSCapture, { type GPSCoords } from '@/components/survey/GPSCapture'
 import { submitInstallationReport } from '@/app/agent/install/[locationId]/actions'
-import type { Location } from '@/types'
+import { INSTALL_PHOTO_SLOTS, type InstallPhotoSlotId, type Location } from '@/types'
 import type SignatureCanvasType from 'react-signature-canvas'
 
 // Load signature pad only in browser (same pattern as QC form)
@@ -30,8 +30,13 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
   return <div className={`bg-white rounded-xl border border-gray-200 p-5 ${className}`}>{children}</div>
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-4">{children}</h2>
+function SectionTitle({ children, hint }: { children: React.ReactNode; hint?: string }) {
+  return (
+    <div className="mb-4">
+      <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest">{children}</h2>
+      {hint && <p className="text-xs text-gray-400 mt-1 normal-case tracking-normal">{hint}</p>}
+    </div>
+  )
 }
 
 function YesNoField({
@@ -61,6 +66,66 @@ function YesNoField({
   )
 }
 
+// One signature block: name (+ optional designation) + pad. Used 3x (Principal / Dept Rep / Contractor).
+function SignatureBlock({
+  title, hint, name, onNameChange, designation, onDesignationChange, onReady, onClear, disabled,
+}: {
+  title: string
+  hint?: string
+  name: string
+  onNameChange: (v: string) => void
+  designation?: string
+  onDesignationChange?: (v: string) => void
+  onReady: (inst: SignatureCanvasType) => void
+  onClear: () => void
+  disabled?: boolean
+}) {
+  return (
+    <Card>
+      <SectionTitle hint={hint}>{title}</SectionTitle>
+      <div className="space-y-3 mb-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            Name <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => onNameChange(e.target.value)}
+            disabled={disabled}
+            placeholder="Full name"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+          />
+        </div>
+        {onDesignationChange && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">Designation</label>
+            <input
+              type="text"
+              value={designation}
+              onChange={(e) => onDesignationChange(e.target.value)}
+              disabled={disabled}
+              placeholder="e.g. Principal, Headmaster"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+            />
+          </div>
+        )}
+      </div>
+      <div className="border-2 border-gray-300 rounded-xl overflow-hidden bg-white" style={{ touchAction: 'none' }}>
+        <SignaturePadWidget onReady={onReady} />
+      </div>
+      <button
+        type="button"
+        onClick={onClear}
+        disabled={disabled}
+        className="mt-2 text-xs text-gray-400 hover:text-gray-600 underline disabled:opacity-50"
+      >
+        Clear signature
+      </button>
+    </Card>
+  )
+}
+
 // ─── Main form ────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -72,47 +137,94 @@ export default function InstallationForm({ location: loc }: Props) {
   const [isPending, startTransition] = useTransition()
 
   const [gps, setGps] = useState<GPSCoords | null>(null)
-  const [toiletInstalled, setToiletInstalled] = useState<boolean | null>(null)
-  const [rampInstalled, setRampInstalled] = useState<boolean | null>(null)
-  const [hardwareInstalled, setHardwareInstalled] = useState<boolean | null>(null)
-  const [notes, setNotes] = useState('')
-  const [photos, setPhotos] = useState<File[]>([])
-  const [signedByName, setSignedByName] = useState('')
-  const [signedByDesignation, setSignedByDesignation] = useState('')
+  const [installationDate, setInstallationDate] = useState('')
 
-  const sigInstance = useRef<SignatureCanvasType | null>(null)
+  // ── Installation checklist (matches GeM completion certificate items) ────
+  const [cwsnUnitInstalled, setCwsnUnitInstalled] = useState<boolean | null>(null)
+  const [rampInstalled, setRampInstalled] = useState<boolean | null>(null)
+  const [grabBarsInstalled, setGrabBarsInstalled] = useState<boolean | null>(null)
+  const [brailleSignageInstalled, setBrailleSignageInstalled] = useState<boolean | null>(null)
+  const [brailleLayoutInstalled, setBrailleLayoutInstalled] = useState<boolean | null>(null)
+  const [tactileTilesInstalled, setTactileTilesInstalled] = useState<boolean | null>(null)
+  const [plumbingConnected, setPlumbingConnected] = useState<boolean | null>(null)
+  const [electricalConnected, setElectricalConnected] = useState<boolean | null>(null)
+  const [functionalTestingPassed, setFunctionalTestingPassed] = useState<boolean | null>(null)
+
+  const [notes, setNotes] = useState('')
+
+  // ── Categorized photos — one slot per checklist item + overall ───────────
+  const [namedPhotos, setNamedPhotos] = useState<Record<InstallPhotoSlotId, File[]>>({
+    cwsn_unit: [], ramp: [], braille_signage: [], braille_layout: [], tactile_tiles: [], overall: [],
+  })
+
+  // ── Joint signatures: Principal (required), Dept Rep (optional), Contractor (required) ──
+  const [principalName, setPrincipalName] = useState('')
+  const [principalDesignation, setPrincipalDesignation] = useState('')
+  const principalSig = useRef<SignatureCanvasType | null>(null)
+
+  const [deptRepApplicable, setDeptRepApplicable] = useState(true)
+  const [deptRepName, setDeptRepName] = useState('')
+  const [deptRepDesignation, setDeptRepDesignation] = useState('')
+  const deptRepSig = useRef<SignatureCanvasType | null>(null)
+
+  const [contractorName, setContractorName] = useState('')
+  const contractorSig = useRef<SignatureCanvasType | null>(null)
+
+  const [schoolSealAffixed, setSchoolSealAffixed] = useState<boolean | null>(null)
+
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [uploadProgress, setUploadProgress] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
   const isSubmitting = isPending
 
-  async function uploadPhotos(): Promise<string[]> {
-    if (!photos.length) return []
+  function setPhotosFor(slot: InstallPhotoSlotId, files: File[]) {
+    setNamedPhotos((prev) => ({ ...prev, [slot]: files }))
+  }
+
+  async function uploadNamedPhotos(): Promise<Record<string, string>> {
     const supabase = createClient()
-    const paths: string[] = []
-    for (let i = 0; i < photos.length; i++) {
-      const file = photos[i]
-      setUploadProgress(`Compressing photo ${i + 1} of ${photos.length}…`)
+    const result: Record<string, string> = {}
+
+    for (const { id, label } of INSTALL_PHOTO_SLOTS) {
+      const file = namedPhotos[id][0]
+      if (!file) continue
+      setUploadProgress(`Uploading photo: ${label}…`)
       const compressed = await imageCompression(file, { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true })
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
-      const path = `${loc.location_code}/install/${Date.now()}_${i}_${safeName}`
-      setUploadProgress(`Uploading photo ${i + 1} of ${photos.length}…`)
+      const path = `${loc.location_code}/install/${Date.now()}_${id}_${safeName}`
       const { error } = await supabase.storage
         .from('installation-media')
         .upload(path, compressed, { contentType: compressed.type, upsert: false })
-      if (error) throw new Error(`Photo upload failed: ${error.message}`)
-      paths.push(path)
+      if (error) throw new Error(`Photo upload failed (${label}): ${error.message}`)
+      result[id] = path
     }
-    return paths
+    return result
   }
 
   function validate(): string | null {
-    if (toiletInstalled === null) return 'Please confirm whether toilet was installed'
-    if (rampInstalled === null) return 'Please confirm whether ramp was installed'
-    if (hardwareInstalled === null) return 'Please confirm whether hardware/fittings were installed'
-    if (!signedByName.trim()) return 'Please enter the supervisor name'
-    if (!sigInstance.current || sigInstance.current.isEmpty()) return 'Please obtain supervisor signature'
+    if (!installationDate) return 'Please enter the date of installation'
+    const checklist: Array<[string, boolean | null]> = [
+      ['CWSN Accessible Unit installed', cwsnUnitInstalled],
+      ['Ramp installed', rampInstalled],
+      ['Grab bars installed', grabBarsInstalled],
+      ['Braille signage installed', brailleSignageInstalled],
+      ['Braille layout map installed', brailleLayoutInstalled],
+      ['Tactile tiles installed', tactileTilesInstalled],
+      ['Plumbing connection completed', plumbingConnected],
+      ['Electrical connection completed', electricalConnected],
+      ['Functional testing passed', functionalTestingPassed],
+    ]
+    for (const [label, val] of checklist) {
+      if (val === null) return `Please confirm: ${label}`
+    }
+    if (!namedPhotos.overall[0]) return 'Please add the overall completion photograph'
+    if (!principalName.trim()) return 'Principal / Head of Institution name is required'
+    if (!principalSig.current || principalSig.current.isEmpty()) return 'Principal / Head of Institution signature is required'
+    if (deptRepApplicable && !deptRepName.trim()) return 'Department Representative name is required, or mark as not applicable'
+    if (!contractorName.trim()) return "Contractor's authorized representative name is required"
+    if (!contractorSig.current || contractorSig.current.isEmpty()) return "Contractor's authorized representative signature is required"
+    if (schoolSealAffixed === null) return 'Please confirm whether the school seal was affixed'
     return null
   }
 
@@ -124,10 +236,14 @@ export default function InstallationForm({ location: loc }: Props) {
     startTransition(async () => {
       try {
         setUploadProgress('Uploading photos…')
-        const photoPaths = await uploadPhotos()
+        const photoPaths = await uploadNamedPhotos()
 
-        setUploadProgress('Processing signature…')
-        const signatureDataUrl = sigInstance.current?.toDataURL('image/png') ?? ''
+        setUploadProgress('Processing signatures…')
+        const principalSignatureDataUrl = principalSig.current?.toDataURL('image/png') ?? ''
+        const deptRepSignatureDataUrl = deptRepApplicable
+          ? (deptRepSig.current && !deptRepSig.current.isEmpty() ? deptRepSig.current.toDataURL('image/png') : '')
+          : ''
+        const contractorSignatureDataUrl = contractorSig.current?.toDataURL('image/png') ?? ''
 
         setUploadProgress('Submitting report…')
         const result = await submitInstallationReport({
@@ -135,14 +251,34 @@ export default function InstallationForm({ location: loc }: Props) {
           locationCode: loc.location_code,
           gpsLat: gps?.lat ?? null,
           gpsLng: gps?.lng ?? null,
-          toiletInstalled,
+          installationDate,
+
+          cwsnUnitInstalled,
           rampInstalled,
-          hardwareInstalled,
+          grabBarsInstalled,
+          brailleSignageInstalled,
+          brailleLayoutInstalled,
+          tactileTilesInstalled,
+          plumbingConnected,
+          electricalConnected,
+          functionalTestingPassed,
           installationNotes: notes,
-          photoPaths,
-          signatureDataUrl,
-          signedByName: signedByName.trim(),
-          signedByDesignation: signedByDesignation.trim(),
+
+          namedPhotoPaths: photoPaths,
+
+          principalSignatureDataUrl,
+          principalName: principalName.trim(),
+          principalDesignation: principalDesignation.trim(),
+
+          deptRepApplicable,
+          deptRepName: deptRepApplicable ? deptRepName.trim() : '',
+          deptRepDesignation: deptRepApplicable ? deptRepDesignation.trim() : '',
+          deptRepSignatureDataUrl,
+
+          contractorName: contractorName.trim(),
+          contractorSignatureDataUrl,
+
+          schoolSealAffixed,
         })
 
         if (result.success) {
@@ -154,7 +290,7 @@ export default function InstallationForm({ location: loc }: Props) {
         }
       } catch (err) {
         console.error('[InstallationForm]', err)
-        setSubmitError('An unexpected error occurred. Please try again.')
+        setSubmitError(err instanceof Error ? err.message : 'An unexpected error occurred. Please try again.')
         setUploadProgress(null)
       }
     })
@@ -190,12 +326,31 @@ export default function InstallationForm({ location: loc }: Props) {
       {/* GPS */}
       <GPSCapture onCapture={setGps} captured={gps} />
 
+      {/* Date of installation */}
+      <Card>
+        <SectionTitle>Date of Installation</SectionTitle>
+        <input
+          type="date"
+          value={installationDate}
+          onChange={(e) => setInstallationDate(e.target.value)}
+          disabled={isSubmitting}
+          max={new Date().toISOString().split('T')[0]}
+          className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+        />
+      </Card>
+
       {/* Installation checklist */}
       <Card>
-        <SectionTitle>Installation Checklist</SectionTitle>
-        <YesNoField label="Toilet installed?" value={toiletInstalled} onChange={setToiletInstalled} disabled={isSubmitting} />
+        <SectionTitle hint="Matches the GeM Project Completion & Quality Certification">Installation Checklist</SectionTitle>
+        <YesNoField label="CWSN Accessible Unit installed?" value={cwsnUnitInstalled} onChange={setCwsnUnitInstalled} disabled={isSubmitting} />
         <YesNoField label="Ramp installed?" value={rampInstalled} onChange={setRampInstalled} disabled={isSubmitting} />
-        <YesNoField label="Hardware / fittings installed?" value={hardwareInstalled} onChange={setHardwareInstalled} disabled={isSubmitting} />
+        <YesNoField label="Grab bars installed?" value={grabBarsInstalled} onChange={setGrabBarsInstalled} disabled={isSubmitting} />
+        <YesNoField label="Braille signage installed?" value={brailleSignageInstalled} onChange={setBrailleSignageInstalled} disabled={isSubmitting} />
+        <YesNoField label="Braille layout map installed?" value={brailleLayoutInstalled} onChange={setBrailleLayoutInstalled} disabled={isSubmitting} />
+        <YesNoField label="Tactile tiles installed?" value={tactileTilesInstalled} onChange={setTactileTilesInstalled} disabled={isSubmitting} />
+        <YesNoField label="Plumbing connection completed?" value={plumbingConnected} onChange={setPlumbingConnected} disabled={isSubmitting} />
+        <YesNoField label="Electrical connection completed?" value={electricalConnected} onChange={setElectricalConnected} disabled={isSubmitting} />
+        <YesNoField label="Functional testing passed?" value={functionalTestingPassed} onChange={setFunctionalTestingPassed} disabled={isSubmitting} />
       </Card>
 
       {/* Notes */}
@@ -211,61 +366,118 @@ export default function InstallationForm({ location: loc }: Props) {
         />
       </Card>
 
-      {/* Photos */}
+      {/* Photo record */}
       <Card>
-        <SectionTitle>Installation Photos</SectionTitle>
-        <p className="text-xs text-gray-400 mb-3">Photograph the installed goods — up to 6 photos.</p>
-        <PhotoUploader files={photos} onChange={setPhotos} disabled={isSubmitting} maxPhotos={6} />
-      </Card>
-
-      {/* Supervisor details */}
-      <Card>
-        <SectionTitle>Supervisor Details</SectionTitle>
-        <div className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Supervisor name <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={signedByName}
-              onChange={(e) => setSignedByName(e.target.value)}
-              disabled={isSubmitting}
-              placeholder="Full name"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Designation</label>
-            <input
-              type="text"
-              value={signedByDesignation}
-              onChange={(e) => setSignedByDesignation(e.target.value)}
-              disabled={isSubmitting}
-              placeholder="e.g. Headmaster, District Officer"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
-            />
-          </div>
+        <SectionTitle hint="One photo per item — the overall completion shot is required">Photo Record</SectionTitle>
+        <div className="space-y-5">
+          {INSTALL_PHOTO_SLOTS.map(({ id, label }) => (
+            <div key={id}>
+              <p className="text-sm font-medium text-gray-800 mb-2">
+                {label} {id === 'overall' && <span className="text-red-500">*</span>}
+              </p>
+              <PhotoUploader
+                files={namedPhotos[id]}
+                onChange={(files) => setPhotosFor(id, files.slice(-1))}
+                disabled={isSubmitting}
+                maxPhotos={1}
+              />
+            </div>
+          ))}
         </div>
       </Card>
 
-      {/* Signature */}
+      {/* Joint signatures */}
+      <SignatureBlock
+        title="Principal / Head of Institution"
+        name={principalName}
+        onNameChange={setPrincipalName}
+        designation={principalDesignation}
+        onDesignationChange={setPrincipalDesignation}
+        onReady={(inst) => { principalSig.current = inst }}
+        onClear={() => principalSig.current?.clear()}
+        disabled={isSubmitting}
+      />
+
       <Card>
-        <SectionTitle>Supervisor Signature</SectionTitle>
-        <p className="text-xs text-gray-400 mb-3">Have the supervisor sign below with finger or mouse.</p>
-        <div className="border-2 border-gray-300 rounded-xl overflow-hidden bg-white" style={{ touchAction: 'none' }}>
-          <SignaturePadWidget
-            onReady={(inst: SignatureCanvasType) => { sigInstance.current = inst }}
-          />
+        <SectionTitle hint="Mark not applicable if no department representative was present">Department Representative</SectionTitle>
+        <div className="flex gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => setDeptRepApplicable(true)}
+            disabled={isSubmitting}
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-all disabled:opacity-50 ${
+              deptRepApplicable ? 'bg-green-600 border-green-600 text-white' : 'bg-white border-gray-300 text-gray-600'
+            }`}
+          >
+            Applicable
+          </button>
+          <button
+            type="button"
+            onClick={() => setDeptRepApplicable(false)}
+            disabled={isSubmitting}
+            className={`flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-all disabled:opacity-50 ${
+              !deptRepApplicable ? 'bg-gray-600 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-600'
+            }`}
+          >
+            Not Applicable
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => sigInstance.current?.clear()}
-          disabled={isSubmitting}
-          className="mt-2 text-xs text-gray-400 hover:text-gray-600 underline disabled:opacity-50"
-        >
-          Clear signature
-        </button>
+        {deptRepApplicable && (
+          <>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={deptRepName}
+                  onChange={(e) => setDeptRepName(e.target.value)}
+                  disabled={isSubmitting}
+                  placeholder="Full name"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Designation</label>
+                <input
+                  type="text"
+                  value={deptRepDesignation}
+                  onChange={(e) => setDeptRepDesignation(e.target.value)}
+                  disabled={isSubmitting}
+                  placeholder="e.g. District Education Officer"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+                />
+              </div>
+            </div>
+            <div className="border-2 border-gray-300 rounded-xl overflow-hidden bg-white" style={{ touchAction: 'none' }}>
+              <SignaturePadWidget onReady={(inst) => { deptRepSig.current = inst }} />
+            </div>
+            <button
+              type="button"
+              onClick={() => deptRepSig.current?.clear()}
+              disabled={isSubmitting}
+              className="mt-2 text-xs text-gray-400 hover:text-gray-600 underline disabled:opacity-50"
+            >
+              Clear signature
+            </button>
+          </>
+        )}
+      </Card>
+
+      <SignatureBlock
+        title="Authorized Representative of Contractor"
+        name={contractorName}
+        onNameChange={setContractorName}
+        onReady={(inst) => { contractorSig.current = inst }}
+        onClear={() => contractorSig.current?.clear()}
+        disabled={isSubmitting}
+      />
+
+      {/* School seal */}
+      <Card>
+        <SectionTitle>School Seal</SectionTitle>
+        <YesNoField label="School seal affixed on the certificate?" value={schoolSealAffixed} onChange={setSchoolSealAffixed} disabled={isSubmitting} />
       </Card>
 
       {/* Progress */}

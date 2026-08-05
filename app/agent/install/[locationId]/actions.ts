@@ -3,26 +3,44 @@
 import React from 'react'
 import { getUserWithRole } from '@/lib/supabase/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { INSTALL_PHOTO_SLOTS } from '@/types'
 
 export interface InstallSubmission {
   locationId: string
   locationCode: string
   gpsLat: number | null
   gpsLng: number | null
+  installationDate: string
 
-  // Checklist
-  toiletInstalled: boolean | null
+  // Checklist — matches GeM Project Completion & Quality Certification
+  cwsnUnitInstalled: boolean | null
   rampInstalled: boolean | null
-  hardwareInstalled: boolean | null
+  grabBarsInstalled: boolean | null
+  brailleSignageInstalled: boolean | null
+  brailleLayoutInstalled: boolean | null
+  tactileTilesInstalled: boolean | null
+  plumbingConnected: boolean | null
+  electricalConnected: boolean | null
+  functionalTestingPassed: boolean | null
   installationNotes: string
 
-  // Media — photos already uploaded by client
-  photoPaths: string[]
+  // Media — categorized photos already uploaded by client, keyed by slot id → storage path
+  namedPhotoPaths: Record<string, string>
 
-  // Signature — base64 PNG, uploaded server-side
-  signatureDataUrl: string
-  signedByName: string
-  signedByDesignation: string
+  // Joint signatures — base64 PNG, uploaded server-side
+  principalSignatureDataUrl: string
+  principalName: string
+  principalDesignation: string
+
+  deptRepApplicable: boolean
+  deptRepName: string
+  deptRepDesignation: string
+  deptRepSignatureDataUrl: string
+
+  contractorName: string
+  contractorSignatureDataUrl: string
+
+  schoolSealAffixed: boolean | null
 }
 
 export interface InstallResult {
@@ -39,19 +57,21 @@ function getPublicUrl(bucket: string, path: string) {
 async function uploadSignature(
   dataUrl: string,
   locationCode: string,
+  slug: string,
   admin: ReturnType<typeof createAdminClient>
 ): Promise<string | null> {
+  if (!dataUrl) return null
   try {
     const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
     const buffer = Buffer.from(base64, 'base64')
-    const path = `${locationCode}/install/${Date.now()}_signature.png`
+    const path = `${locationCode}/install/${Date.now()}_${slug}_signature.png`
     const { error } = await admin.storage
       .from('installation-media')
       .upload(path, buffer, { contentType: 'image/png', upsert: false })
-    if (error) { console.error('[uploadSignature]', error.message); return null }
+    if (error) { console.error(`[uploadSignature:${slug}]`, error.message); return null }
     return getPublicUrl('installation-media', path)
   } catch (e) {
-    console.error('[uploadSignature]', e)
+    console.error(`[uploadSignature:${slug}]`, e)
     return null
   }
 }
@@ -89,12 +109,12 @@ export async function submitInstallationReport(
   const admin = createAdminClient()
   const now = new Date().toISOString()
 
-  // Upload signature
-  const signatureUrl = await uploadSignature(
-    submission.signatureDataUrl,
-    submission.locationCode,
-    admin
-  )
+  // Upload the three joint signatures
+  const principalSignatureUrl = await uploadSignature(submission.principalSignatureDataUrl, submission.locationCode, 'principal', admin)
+  const deptRepSignatureUrl = submission.deptRepApplicable
+    ? await uploadSignature(submission.deptRepSignatureDataUrl, submission.locationCode, 'dept_rep', admin)
+    : null
+  const contractorSignatureUrl = await uploadSignature(submission.contractorSignatureDataUrl, submission.locationCode, 'contractor', admin)
 
   // Check for existing report (from delivery step)
   const { data: existing } = await admin
@@ -109,14 +129,37 @@ export async function submitInstallationReport(
     agent_id: user.id,
     gps_lat: submission.gpsLat,
     gps_lng: submission.gpsLng,
-    toilet_installed: submission.toiletInstalled,
+    installation_date: submission.installationDate || null,
+
+    cwsn_unit_installed: submission.cwsnUnitInstalled,
     ramp_installed: submission.rampInstalled,
-    hardware_installed: submission.hardwareInstalled,
+    grab_bars_installed: submission.grabBarsInstalled,
+    braille_signage_installed: submission.brailleSignageInstalled,
+    braille_layout_installed: submission.brailleLayoutInstalled,
+    tactile_tiles_installed: submission.tactileTilesInstalled,
+    plumbing_connected: submission.plumbingConnected,
+    electrical_connected: submission.electricalConnected,
+    functional_testing_passed: submission.functionalTestingPassed,
     installation_notes: submission.installationNotes || null,
-    photos: submission.photoPaths,
-    signature_data_url: signatureUrl,
-    signed_by_name: submission.signedByName || null,
-    signed_by_designation: submission.signedByDesignation || null,
+
+    named_photos: submission.namedPhotoPaths,
+    // Keep legacy `photos` populated too so anything still reading the flat array works.
+    photos: Object.values(submission.namedPhotoPaths),
+
+    signature_data_url: principalSignatureUrl,
+    signed_by_name: submission.principalName || null,
+    signed_by_designation: submission.principalDesignation || null,
+
+    dept_rep_applicable: submission.deptRepApplicable,
+    dept_rep_name: submission.deptRepApplicable ? (submission.deptRepName || null) : null,
+    dept_rep_designation: submission.deptRepApplicable ? (submission.deptRepDesignation || null) : null,
+    dept_rep_signature_url: deptRepSignatureUrl,
+
+    contractor_name: submission.contractorName || null,
+    contractor_signature_url: contractorSignatureUrl,
+
+    school_seal_affixed: submission.schoolSealAffixed,
+
     submitted_at: now,
     status: 'pending',
   }
@@ -154,6 +197,12 @@ export async function submitInstallationReport(
     .eq('id', submission.locationId)
     .single()
 
+  // Resolve named photo paths → public URLs, in fixed slot order, for the PDF
+  const namedPhotoUrls = INSTALL_PHOTO_SLOTS
+    .map(({ id }) => submission.namedPhotoPaths[id])
+    .filter(Boolean)
+    .map((p) => getPublicUrl('installation-media', p))
+
   // Generate PDF (non-fatal)
   const reportData = {
     locationCode: loc?.location_code ?? submission.locationCode,
@@ -165,16 +214,37 @@ export async function submitInstallationReport(
     gpsLat: submission.gpsLat,
     gpsLng: submission.gpsLng,
     submittedAt: now,
-    toiletInstalled: submission.toiletInstalled,
-    rampInstalled: submission.rampInstalled,
-    hardwareInstalled: submission.hardwareInstalled,
+    installationDate: submission.installationDate || null,
+
+    checklist: {
+      cwsnUnitInstalled: submission.cwsnUnitInstalled,
+      rampInstalled: submission.rampInstalled,
+      grabBarsInstalled: submission.grabBarsInstalled,
+      brailleSignageInstalled: submission.brailleSignageInstalled,
+      brailleLayoutInstalled: submission.brailleLayoutInstalled,
+      tactileTilesInstalled: submission.tactileTilesInstalled,
+      plumbingConnected: submission.plumbingConnected,
+      electricalConnected: submission.electricalConnected,
+      functionalTestingPassed: submission.functionalTestingPassed,
+    },
     installationNotes: submission.installationNotes || null,
-    photoUrls: submission.photoPaths.map((p) =>
-      getPublicUrl('installation-media', p)
-    ),
-    signatureUrl,
-    signedByName: submission.signedByName || null,
-    signedByDesignation: submission.signedByDesignation || null,
+
+    photoUrls: namedPhotoUrls,
+
+    principalSignatureUrl,
+    principalName: submission.principalName || null,
+    principalDesignation: submission.principalDesignation || null,
+
+    deptRepApplicable: submission.deptRepApplicable,
+    deptRepSignatureUrl,
+    deptRepName: submission.deptRepApplicable ? (submission.deptRepName || null) : null,
+    deptRepDesignation: submission.deptRepApplicable ? (submission.deptRepDesignation || null) : null,
+
+    contractorSignatureUrl,
+    contractorName: submission.contractorName || null,
+
+    schoolSealAffixed: submission.schoolSealAffixed,
+
     verificationStatus: null,
     verifierNotes: null,
     verifiedAt: null,

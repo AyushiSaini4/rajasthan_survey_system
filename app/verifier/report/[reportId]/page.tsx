@@ -64,15 +64,35 @@ export default async function VerifierReportPage({ params }: Props) {
   }
   if (!report) notFound()
 
-  const photoUrls: string[] = (report.photos ?? []).map((p: string) =>
-    getPublicStorageUrl('installation-media', p)
-  )
+  const PHOTO_SLOT_LABELS: Record<string, string> = {
+    cwsn_unit: 'Installed Accessible Unit',
+    ramp: 'Ramp',
+    braille_signage: 'Braille Signage',
+    braille_layout: 'Braille Layout Map',
+    tactile_tiles: 'Tactile Tiles',
+    overall: 'Overall Completion Photograph',
+  }
 
-  const signatureUrl = report.signature_data_url
-    ? report.signature_data_url.startsWith('http')
-      ? report.signature_data_url
-      : getPublicStorageUrl('installation-media', report.signature_data_url)
-    : null
+  const namedPhotos = report.named_photos ?? {}
+  const namedPhotoEntries = Object.entries(namedPhotos).map(([slot, path]) => ({
+    slot,
+    label: PHOTO_SLOT_LABELS[slot] ?? slot,
+    url: (path as string).startsWith('http') ? (path as string) : getPublicStorageUrl('installation-media', path as string),
+  }))
+
+  // Fall back to the flat `photos` array for reports filed before the QC expansion
+  const photoUrls: string[] = namedPhotoEntries.length
+    ? []
+    : (report.photos ?? []).map((p: string) => getPublicStorageUrl('installation-media', p))
+
+  function resolveSig(url: string | null): string | null {
+    if (!url) return null
+    return url.startsWith('http') ? url : getPublicStorageUrl('installation-media', url)
+  }
+
+  const principalSignatureUrl = resolveSig(report.signature_data_url)
+  const deptRepSignatureUrl = resolveSig(report.dept_rep_signature_url)
+  const contractorSignatureUrl = resolveSig(report.contractor_signature_url)
 
   return (
     <div className="space-y-5 pb-10">
@@ -142,6 +162,10 @@ export default async function VerifierReportPage({ params }: Props) {
         <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Submission Details</h2>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
           <div>
+            <dt className="text-xs text-gray-400">Date of Installation</dt>
+            <dd className="text-sm text-gray-900 mt-0.5">{fmtDate(report.installation_date)}</dd>
+          </div>
+          <div>
             <dt className="text-xs text-gray-400">Submitted</dt>
             <dd className="text-sm text-gray-900 mt-0.5">{fmtDateTime(report.submitted_at)}</dd>
           </div>
@@ -178,9 +202,16 @@ export default async function VerifierReportPage({ params }: Props) {
       {/* Installation checklist */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Installation Checklist</h2>
-        <CheckRow label="Toilet installed" value={report.toilet_installed} />
-        <CheckRow label="Ramp / accessible entry installed" value={report.ramp_installed} />
-        <CheckRow label="Hardware / fittings installed" value={report.hardware_installed} />
+        <CheckRow label="CWSN Accessible Unit installed" value={report.cwsn_unit_installed} />
+        <CheckRow label="Ramp installed" value={report.ramp_installed} />
+        <CheckRow label="Grab bars installed" value={report.grab_bars_installed} />
+        <CheckRow label="Braille signage installed" value={report.braille_signage_installed} />
+        <CheckRow label="Braille layout map installed" value={report.braille_layout_installed} />
+        <CheckRow label="Tactile tiles installed" value={report.tactile_tiles_installed} />
+        <CheckRow label="Plumbing connection completed" value={report.plumbing_connected} />
+        <CheckRow label="Electrical connection completed" value={report.electrical_connected} />
+        <CheckRow label="Functional testing passed" value={report.functional_testing_passed} />
+        <CheckRow label="School seal affixed" value={report.school_seal_affixed} />
         {report.installation_notes && (
           <div className="mt-3 pt-3 border-t border-gray-100">
             <p className="text-xs text-gray-400 mb-1">Notes</p>
@@ -189,50 +220,86 @@ export default async function VerifierReportPage({ params }: Props) {
         )}
       </div>
 
-      {/* Photos */}
-      {photoUrls.length > 0 && (
+      {/* Photo record */}
+      {(namedPhotoEntries.length > 0 || photoUrls.length > 0) && (
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">
-            Photos ({photoUrls.length})
+            Photo Record ({namedPhotoEntries.length || photoUrls.length})
           </h2>
-          <div className="grid grid-cols-2 gap-2">
-            {photoUrls.map((url, i) => (
-              <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
-                <div className="relative aspect-[4/3] rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={url}
-                    alt={`Installation photo ${i + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              </a>
-            ))}
+          <div className="grid grid-cols-2 gap-3">
+            {namedPhotoEntries.length > 0
+              ? namedPhotoEntries.map(({ slot, label, url }) => (
+                  <a key={slot} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                    <div className="relative aspect-[4/3] rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={label} className="w-full h-full object-cover" />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1 text-center">{label}</p>
+                  </a>
+                ))
+              : photoUrls.map((url, i) => (
+                  <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                    <div className="relative aspect-[4/3] rounded-lg overflow-hidden bg-gray-100 border border-gray-200">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={url} alt={`Installation photo ${i + 1}`} className="w-full h-full object-cover" />
+                    </div>
+                  </a>
+                ))}
           </div>
         </div>
       )}
 
-      {/* Supervisor signature */}
+      {/* Joint signatures */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Supervisor Sign-off</h2>
-        {signatureUrl ? (
-          <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50 mb-2 p-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={signatureUrl}
-              alt="Supervisor signature"
-              className="max-h-28 mx-auto"
-            />
+        <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Joint Signatures</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <p className="text-xs text-gray-400 mb-1.5">Principal / Head of Institution</p>
+            {principalSignatureUrl ? (
+              <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50 mb-1.5 p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={principalSignatureUrl} alt="Principal signature" className="max-h-20 mx-auto" />
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 italic mb-1.5">No signature on file</p>
+            )}
+            {report.signed_by_name && <p className="text-sm font-semibold text-gray-900">{report.signed_by_name}</p>}
+            {report.signed_by_designation && <p className="text-xs text-gray-500">{report.signed_by_designation}</p>}
           </div>
-        ) : (
-          <p className="text-sm text-gray-400 italic mb-2">No signature on file</p>
-        )}
-        {report.signed_by_name && (
-          <p className="text-sm font-semibold text-gray-900">{report.signed_by_name}</p>
-        )}
-        {report.signed_by_designation && (
-          <p className="text-xs text-gray-500">{report.signed_by_designation}</p>
-        )}
+
+          <div>
+            <p className="text-xs text-gray-400 mb-1.5">Department Representative</p>
+            {report.dept_rep_applicable === false ? (
+              <p className="text-sm text-gray-400 italic mb-1.5">Not applicable</p>
+            ) : deptRepSignatureUrl ? (
+              <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50 mb-1.5 p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={deptRepSignatureUrl} alt="Department representative signature" className="max-h-20 mx-auto" />
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 italic mb-1.5">No signature on file</p>
+            )}
+            {report.dept_rep_applicable !== false && report.dept_rep_name && (
+              <p className="text-sm font-semibold text-gray-900">{report.dept_rep_name}</p>
+            )}
+            {report.dept_rep_applicable !== false && report.dept_rep_designation && (
+              <p className="text-xs text-gray-500">{report.dept_rep_designation}</p>
+            )}
+          </div>
+
+          <div>
+            <p className="text-xs text-gray-400 mb-1.5">Authorized Rep. of Contractor</p>
+            {contractorSignatureUrl ? (
+              <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-50 mb-1.5 p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={contractorSignatureUrl} alt="Contractor representative signature" className="max-h-20 mx-auto" />
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 italic mb-1.5">No signature on file</p>
+            )}
+            {report.contractor_name && <p className="text-sm font-semibold text-gray-900">{report.contractor_name}</p>}
+          </div>
+        </div>
       </div>
 
       {/* Verification form */}

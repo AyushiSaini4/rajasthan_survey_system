@@ -294,13 +294,18 @@ export interface InstallationReport {
   goods_received_at: string | null
   goods_received_by: string | null
   delivery_confirmed: boolean
+  /** @deprecated superseded by cwsn_unit_installed — kept for historical reports */
   toilet_installed: boolean | null
   ramp_installed: boolean | null
+  /** @deprecated superseded by grab_bars_installed / plumbing_connected / electrical_connected */
   hardware_installed: boolean | null
   installation_notes: string | null
   photos: string[]
+  /** Principal / Head of Institution signature (column name kept for compatibility) */
   signature_data_url: string | null
+  /** Principal / Head of Institution name (column name kept for compatibility) */
   signed_by_name: string | null
+  /** Principal / Head of Institution designation (column name kept for compatibility) */
   signed_by_designation: string | null
   pdf_url: string | null
   status: InstallationReportStatus
@@ -308,7 +313,38 @@ export interface InstallationReport {
   verified_at: string | null
   verifier_notes: string | null
   rejection_reason: string | null
+
+  // ── QC expansion (matches GeM Completion & Quality Certification) ─────────
+  installation_date: string | null
+  cwsn_unit_installed: boolean | null
+  grab_bars_installed: boolean | null
+  braille_signage_installed: boolean | null
+  braille_layout_installed: boolean | null
+  tactile_tiles_installed: boolean | null
+  plumbing_connected: boolean | null
+  electrical_connected: boolean | null
+  functional_testing_passed: boolean | null
+  named_photos: Record<string, string>
+  dept_rep_applicable: boolean | null
+  dept_rep_name: string | null
+  dept_rep_designation: string | null
+  dept_rep_signature_url: string | null
+  contractor_name: string | null
+  contractor_signature_url: string | null
+  school_seal_affixed: boolean | null
 }
+
+/** Named photo slot ids for the installation completion record. */
+export const INSTALL_PHOTO_SLOTS = [
+  { id: 'cwsn_unit', label: 'Installed Accessible Unit' },
+  { id: 'ramp', label: 'Ramp' },
+  { id: 'braille_signage', label: 'Braille Signage' },
+  { id: 'braille_layout', label: 'Braille Layout Map' },
+  { id: 'tactile_tiles', label: 'Tactile Tiles' },
+  { id: 'overall', label: 'Overall Completion Photograph' },
+] as const
+
+export type InstallPhotoSlotId = typeof INSTALL_PHOTO_SLOTS[number]['id']
 
 // ─── Offline Sync ─────────────────────────────────────────────────────────────
 

@@ -66,8 +66,8 @@ export default async function InstallationReportPage({ params }: Props) {
 
   // Check if installation already submitted
   const alreadySubmitted =
-    existingReport?.toilet_installed !== null &&
-    existingReport?.toilet_installed !== undefined
+    existingReport?.cwsn_unit_installed !== null &&
+    existingReport?.cwsn_unit_installed !== undefined
 
   return (
     <div className="space-y-5">

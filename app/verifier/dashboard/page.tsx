@@ -100,9 +100,10 @@ export default async function VerifierDashboardPage() {
                     {/* Install checklist summary */}
                     <div className="flex items-center gap-3 mt-2 flex-wrap">
                       {[
-                        { label: 'Toilet', val: report.toilet_installed },
+                        { label: 'CWSN Unit', val: report.cwsn_unit_installed },
                         { label: 'Ramp', val: report.ramp_installed },
-                        { label: 'Hardware', val: report.hardware_installed },
+                        { label: 'Grab Bars', val: report.grab_bars_installed },
+                        { label: 'Functional Test', val: report.functional_testing_passed },
                       ].map((item) => (
                         <span
                           key={item.label}

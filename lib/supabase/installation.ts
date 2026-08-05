@@ -63,7 +63,7 @@ export async function getPendingInstallationReports(): Promise<InstallationRepor
       location:locations(id, location_code, name, district, block, village, address)
     `)
     .eq('status', 'pending')
-    .not('toilet_installed', 'is', null)
+    .not('cwsn_unit_installed', 'is', null)
     .order('submitted_at', { ascending: false })
 
   if (error) {
