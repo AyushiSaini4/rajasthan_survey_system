@@ -5,6 +5,7 @@ import LocationTimeline from '@/components/admin/LocationTimeline'
 import LocationStatusBadge from '@/components/shared/LocationStatusBadge'
 import AssignUnitSection from '@/components/admin/AssignUnitSection'
 import AssignAgentSection from '@/components/admin/AssignAgentSection'
+import EditProductionQuantities from '@/components/admin/EditProductionQuantities'
 import PrintButton from '@/components/admin/PrintButton'
 import type { QCInspection } from '@/types'
 import { QUESTIONNAIRE, MANDATORY_PHOTO_SLOTS } from '@/lib/survey/questionnaire'
@@ -307,15 +308,7 @@ export default async function LocationDetailPage({ params }: Props) {
               </div>
             </div>
             <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Quantities to Produce</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[['Tiles (sq ft)', productionJob.qty_tiles],['Toilet Units', productionJob.qty_toilet_units],['Ramp Units', productionJob.qty_ramp_units],['Fitting Sets', productionJob.qty_fittings]].map(([label, value]) => (
-                  <div key={label as string} className="bg-gray-50 rounded-lg p-3 text-center border border-gray-200">
-                    <p className="text-2xl font-bold text-gray-900">{value ?? '—'}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{label}</p>
-                  </div>
-                ))}
-              </div>
+              <EditProductionQuantities job={productionJob} />
             </div>
             {productionJob.production_notes && (
               <div>

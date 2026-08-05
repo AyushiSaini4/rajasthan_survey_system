@@ -58,12 +58,15 @@ export default async function DeliveryConfirmationPage({ params }: Props) {
               })}
             </p>
           )}
+          <p className="mt-2 text-green-600">
+            A QC inspector will visit the site to complete the installation report. Your part is done here.
+          </p>
           <div className="mt-3">
             <Link
-              href={`/agent/install/${location.id}`}
+              href="/agent/dashboard"
               className="inline-flex items-center px-3 py-2 bg-green-600 text-white text-sm font-semibold rounded-lg hover:bg-green-700 transition-colors"
             >
-              Go to Installation Report →
+              Back to Dashboard →
             </Link>
           </div>
         </div>

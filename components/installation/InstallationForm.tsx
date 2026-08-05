@@ -7,7 +7,7 @@ import imageCompression from 'browser-image-compression'
 import { createClient } from '@/lib/supabase/client'
 import PhotoUploader from '@/components/survey/PhotoUploader'
 import GPSCapture, { type GPSCoords } from '@/components/survey/GPSCapture'
-import { submitInstallationReport } from '@/app/agent/install/[locationId]/actions'
+import { submitInstallationReport } from '@/app/qc/install/[locationId]/actions'
 import { INSTALL_PHOTO_SLOTS, type InstallPhotoSlotId, type Location } from '@/types'
 import type SignatureCanvasType from 'react-signature-canvas'
 
@@ -283,7 +283,7 @@ export default function InstallationForm({ location: loc }: Props) {
 
         if (result.success) {
           setSuccess(true)
-          setTimeout(() => router.push('/agent/dashboard'), 2500)
+          setTimeout(() => router.push('/qc/dashboard'), 2500)
         } else {
           setSubmitError(result.error ?? 'Submission failed. Please try again.')
           setUploadProgress(null)
@@ -505,7 +505,7 @@ export default function InstallationForm({ location: loc }: Props) {
       </button>
 
       <div className="text-center">
-        <a href="/agent/dashboard" className="text-sm text-green-600 hover:text-green-700">
+        <a href="/qc/dashboard" className="text-sm text-green-600 hover:text-green-700">
           ← Back to dashboard
         </a>
       </div>

@@ -108,6 +108,64 @@ export async function assignLocationToUnit(
   return { success: true }
 }
 
+// ─── Edit quantities on an existing production job ────────────────────────────
+// Separate from assignLocationToUnit's initial quantities: this lets admin go
+// back and fill in / correct material quantities on a job that's already been
+// assigned — needed for locations with no cwsn_schools sanction match (like
+// RJ-0002), where quantities were deliberately left blank at assignment time
+// rather than fabricated, and someone with the real figures needs a way to
+// enter them afterward.
+
+export async function updateProductionJobQuantities(
+  jobId: string,
+  quantities: AssignQuantities
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) {
+    return { success: false, error: 'Not authenticated' }
+  }
+
+  const role = user.app_metadata?.role as string | undefined
+  if (role !== 'admin') {
+    return { success: false, error: 'Forbidden — admin only' }
+  }
+
+  const admin = createAdminClient()
+
+  const { data: job, error: fetchError } = await admin
+    .from('production_jobs')
+    .select('id, location_id')
+    .eq('id', jobId)
+    .single()
+
+  if (fetchError || !job) {
+    return { success: false, error: 'Production job not found' }
+  }
+
+  const { error: updateError } = await admin
+    .from('production_jobs')
+    .update({
+      qty_tiles: quantities.qtyTiles,
+      qty_toilet_units: quantities.qtyToiletUnits,
+      qty_ramp_units: quantities.qtyRampUnits,
+      qty_fittings: quantities.qtyFittings,
+      qty_other: quantities.qtyOther,
+    })
+    .eq('id', jobId)
+
+  if (updateError) {
+    console.error('[updateProductionJobQuantities] update error:', updateError.message)
+    return { success: false, error: 'Failed to update quantities' }
+  }
+
+  revalidatePath(`/admin/location/${job.location_id}`)
+  revalidatePath('/unit/dashboard')
+
+  return { success: true }
+}
+
 // ─── Assign a field agent to a location ──────────────────────────────────────
 export async function assignAgentToLocation(
   locationId: string,

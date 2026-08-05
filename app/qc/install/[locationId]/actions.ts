@@ -5,6 +5,14 @@ import { getUserWithRole } from '@/lib/supabase/auth'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { INSTALL_PHOTO_SLOTS } from '@/types'
 
+// NOTE: this used to be the Field Agent's step (app/agent/install/...).
+// Moved to QC Inspector — the site-visit "after report" is now a separate
+// role from the person who reported the before-condition, matching the
+// agency's real workflow (separation of duties between the field agent's
+// survey/delivery and the QC inspector's independent verification).
+// The `agent_id` column name is a holdover from that move; it now stores
+// the submitting QC inspector's user id.
+
 export interface InstallSubmission {
   locationId: string
   locationCode: string
@@ -104,7 +112,7 @@ export async function submitInstallationReport(
   submission: InstallSubmission
 ): Promise<InstallResult> {
   const { user, role } = await getUserWithRole()
-  if (!user || role !== 'field_agent') return { success: false, error: 'Unauthorized' }
+  if (!user || role !== 'qc_inspector') return { success: false, error: 'Unauthorized' }
 
   const admin = createAdminClient()
   const now = new Date().toISOString()

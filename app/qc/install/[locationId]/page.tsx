@@ -20,26 +20,26 @@ export default async function InstallationReportPage({ params }: Props) {
     redirect('/login')
   }
 
-  if (!user || role !== 'field_agent') redirect('/login')
+  if (!user || role !== 'qc_inspector') redirect('/login')
 
   const location = await getLocationForInstall(params.locationId)
   if (!location) notFound()
 
   const existingReport = await getInstallReportForLocation(params.locationId)
 
-  // Must confirm delivery first
+  // Field Agent must have confirmed delivery before QC can do the site visit
   const deliveryConfirmed = existingReport?.delivery_confirmed === true
   if (!deliveryConfirmed) {
     return (
       <div className="space-y-5">
         <div>
           <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-            <Link href="/agent/dashboard" className="hover:text-gray-700">Dashboard</Link>
+            <Link href="/qc/dashboard" className="hover:text-gray-700">Dashboard</Link>
             <span>›</span>
-            <span className="text-gray-900 font-medium">Installation Report</span>
+            <span className="text-gray-900 font-medium">Site Installation Report</span>
           </div>
-          <h1 className="text-xl font-bold text-gray-900">Installation Report</h1>
-          <p className="text-sm font-mono text-blue-600 mt-0.5">
+          <h1 className="text-xl font-bold text-gray-900">Site Installation Report</h1>
+          <p className="text-sm font-mono text-indigo-600 mt-0.5">
             {location.location_code}
             {location.name ? ` — ${location.name}` : ''}
           </p>
@@ -48,23 +48,15 @@ export default async function InstallationReportPage({ params }: Props) {
         <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-4 text-sm text-amber-700">
           <p className="font-bold">Delivery not yet confirmed</p>
           <p className="mt-1">
-            You must confirm that goods were received at this location before submitting
-            the installation report.
+            The field agent hasn&apos;t confirmed that goods were received at this location yet.
+            This location will move to your queue once that happens.
           </p>
-          <div className="mt-3">
-            <Link
-              href={`/agent/delivery/${location.id}`}
-              className="inline-flex items-center px-3 py-2 bg-amber-600 text-white text-sm font-semibold rounded-lg hover:bg-amber-700 transition-colors"
-            >
-              Confirm Delivery First →
-            </Link>
-          </div>
         </div>
       </div>
     )
   }
 
-  // Check if installation already submitted
+  // Check if this site report was already submitted
   const alreadySubmitted =
     existingReport?.cwsn_unit_installed !== null &&
     existingReport?.cwsn_unit_installed !== undefined
@@ -74,12 +66,12 @@ export default async function InstallationReportPage({ params }: Props) {
       {/* Breadcrumb */}
       <div>
         <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-          <Link href="/agent/dashboard" className="hover:text-gray-700">Dashboard</Link>
+          <Link href="/qc/dashboard" className="hover:text-gray-700">Dashboard</Link>
           <span>›</span>
-          <span className="text-gray-900 font-medium">Installation Report</span>
+          <span className="text-gray-900 font-medium">Site Installation Report</span>
         </div>
-        <h1 className="text-xl font-bold text-gray-900">Installation Report</h1>
-        <p className="text-sm font-mono text-blue-600 mt-0.5">
+        <h1 className="text-xl font-bold text-gray-900">Site Installation Report</h1>
+        <p className="text-sm font-mono text-indigo-600 mt-0.5">
           {location.location_code}
           {location.name ? ` — ${location.name}` : ''}
         </p>
@@ -90,7 +82,7 @@ export default async function InstallationReportPage({ params }: Props) {
 
       {alreadySubmitted ? (
         <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-4 text-sm text-green-700">
-          <p className="font-bold">✓ Installation report already submitted</p>
+          <p className="font-bold">✓ Site installation report already submitted</p>
           <p className="mt-1 text-green-600">
             This report is pending verifier review. You will be notified if it is rejected
             and resubmission is required.

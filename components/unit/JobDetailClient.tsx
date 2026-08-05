@@ -55,13 +55,17 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 function QuantityRow({ label, value, unit }: { label: string; value: number | null; unit: string }) {
-  if (!value) return null
+  const needed = value != null && value > 0
   return (
     <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
       <span className="text-sm text-gray-600">{label}</span>
-      <span className="text-sm font-semibold text-gray-900">
-        {value.toLocaleString()} {unit}
-      </span>
+      {needed ? (
+        <span className="text-sm font-semibold text-gray-900">
+          {value.toLocaleString()} {unit}
+        </span>
+      ) : (
+        <span className="text-xs font-medium text-gray-400">Not needed</span>
+      )}
     </div>
   )
 }
@@ -169,21 +173,22 @@ export default function JobDetailClient({ job }: Props) {
         </span>
       </div>
 
-      {/* ── Quantities to produce ─────────────────────────────────────────── */}
+      {/* ── Materials to produce ──────────────────────────────────────────── */}
       <Card>
-        <SectionTitle>Quantities to Produce</SectionTitle>
+        <SectionTitle>Materials to Produce</SectionTitle>
         <div>
-          <QuantityRow label="Tiles" value={job.qty_tiles} unit="sq ft" />
-          <QuantityRow label="Toilet units" value={job.qty_toilet_units} unit="units" />
-          <QuantityRow label="Ramp units" value={job.qty_ramp_units} unit="units" />
-          <QuantityRow label="Fitting sets" value={job.qty_fittings} unit="sets" />
-          {job.qty_other && Object.entries(job.qty_other).map(([key, val]) => (
-            <QuantityRow key={key} label={key} value={val} unit="units" />
-          ))}
-          {!job.qty_tiles && !job.qty_toilet_units && !job.qty_ramp_units && !job.qty_fittings && (
-            <p className="text-sm text-gray-400 py-2">No quantities recorded for this job.</p>
-          )}
+          <QuantityRow label="CWSN Accessible Unit" value={job.qty_toilet_units} unit="units" />
+          <QuantityRow label="Ramp" value={job.qty_ramp_units} unit="units" />
+          <QuantityRow label="Grab Bars" value={job.qty_fittings} unit="units" />
+          <QuantityRow label="Tactile Tiles" value={job.qty_tiles} unit="sq ft" />
+          <QuantityRow label="Braille Signage" value={job.qty_other?.braille_signage ?? null} unit="units" />
+          <QuantityRow label="Braille Layout Map" value={job.qty_other?.braille_layout_plan ?? null} unit="units" />
         </div>
+        {!job.qty_tiles && !job.qty_toilet_units && !job.qty_ramp_units && !job.qty_fittings && !job.qty_other && (
+          <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-2">
+            Nothing entered yet for this job — ask admin to fill in quantities on the location's admin page.
+          </p>
+        )}
 
         {/* Assigned date */}
         <div className="mt-3 pt-3 border-t border-gray-100">

@@ -100,6 +100,6 @@ export async function rejectInstallationReport(
     return { success: false, error: 'Database error. Please try again.' }
   }
 
-  // Location stays at 'installed' — field agent must resubmit
+  // Location stays at 'installed' — QC inspector must resubmit the site report
   return { success: true }
 }

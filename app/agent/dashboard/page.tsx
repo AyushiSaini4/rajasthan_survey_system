@@ -28,7 +28,7 @@ function resolveAction(location: Location): CardAction {
     case 'dispatched':
       return { kind: 'link', href: `/agent/delivery/${location.id}`, label: 'Confirm Delivery', color: 'blue' }
     case 'delivered':
-      return { kind: 'link', href: `/agent/install/${location.id}`, label: 'Installation Report', color: 'blue' }
+      return { kind: 'waiting', label: 'Awaiting QC site visit' }
     case 'installed':
     case 'verified':
     case 'closed':

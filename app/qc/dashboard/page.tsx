@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getUserWithRole } from '@/lib/supabase/auth'
-import { getJobsForQC, type ProductionJobForQC } from '@/lib/supabase/qc'
+import { getJobsForQC, getLocationsAwaitingSiteReport, type ProductionJobForQC, type LocationAwaitingSiteReport } from '@/lib/supabase/qc'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +67,30 @@ function JobRow({ job }: { job: ProductionJobForQC }) {
   )
 }
 
+// ─── Site installation report row ──────────────────────────────────────────────
+
+function SiteReportRow({ loc }: { loc: LocationAwaitingSiteReport }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4 hover:border-indigo-300 hover:shadow-sm transition-all">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <span className="text-xs font-mono font-bold text-indigo-600">{loc.location_code}</span>
+          <h3 className="text-sm font-semibold text-gray-900 mt-0.5">{loc.name ?? loc.location_code}</h3>
+          {(loc.district || loc.block) && (
+            <p className="text-xs text-gray-500 mt-0.5">{[loc.village, loc.block, loc.district].filter(Boolean).join(', ')}</p>
+          )}
+        </div>
+        <Link
+          href={`/qc/install/${loc.id}`}
+          className="flex-shrink-0 inline-flex items-center px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
+        >
+          File Report →
+        </Link>
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function QCDashboardPage({
@@ -86,35 +110,27 @@ export default async function QCDashboardPage({
   if (!user || role !== 'qc_inspector') redirect('/login')
 
   let jobs: ProductionJobForQC[] = []
+  let siteReportLocations: LocationAwaitingSiteReport[] = []
   let fetchError: string | null = null
 
   try {
-    jobs = await getJobsForQC()
+    ;[jobs, siteReportLocations] = await Promise.all([
+      getJobsForQC(),
+      getLocationsAwaitingSiteReport(),
+    ])
   } catch {
-    fetchError = 'Could not load the QC queue. Please refresh.'
+    fetchError = 'Could not load the QC queues. Please refresh.'
   }
 
   const justSubmitted = searchParams.submitted === '1'
 
   return (
-    <div className="space-y-5">
-
-      {/* ── Page header ───────────────────────────────────────────────────── */}
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">QC Inspection Queue</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
-          {fetchError
-            ? 'Error loading queue'
-            : jobs.length === 0
-            ? 'No jobs awaiting inspection'
-            : `${jobs.length} job${jobs.length !== 1 ? 's' : ''} ready for inspection`}
-        </p>
-      </div>
+    <div className="space-y-8">
 
       {/* ── Success toast after submission ─────────────────────────────────── */}
       {justSubmitted && (
         <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-700 font-medium">
-          ✓ Inspection submitted successfully. PDF report is being generated.
+          ✓ Submitted successfully. PDF report is being generated.
         </div>
       )}
 
@@ -125,40 +141,69 @@ export default async function QCDashboardPage({
         </div>
       )}
 
-      {/* ── Empty ─────────────────────────────────────────────────────────── */}
-      {!fetchError && jobs.length === 0 && (
-        <div className="rounded-xl border border-gray-200 bg-white px-4 py-14 text-center">
-          <div
-            className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-3"
-            style={{ width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <svg
-              className="w-6 h-6 text-indigo-400"
-              width={24}
-              height={24}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-            </svg>
-          </div>
-          <p className="text-sm font-medium text-gray-600">All clear — no jobs awaiting QC</p>
-          <p className="text-xs text-gray-400 mt-1">
-            Jobs appear here when a manufacturing unit marks production complete.
+      {/* ══ Section 1: Factory QC — internal quality gate before dispatch ══ */}
+      <div className="space-y-4">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Factory QC Queue</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Internal quality gate on manufactured goods, before they leave the unit —{' '}
+            {jobs.length === 0 ? 'no jobs awaiting inspection' : `${jobs.length} job${jobs.length !== 1 ? 's' : ''} ready for inspection`}
           </p>
         </div>
-      )}
 
-      {/* ── Job list ──────────────────────────────────────────────────────── */}
-      {jobs.length > 0 && (
-        <div className="space-y-3">
-          {jobs.map((job) => (
-            <JobRow key={job.id} job={job} />
-          ))}
+        {!fetchError && jobs.length === 0 && (
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-10 text-center">
+            <div
+              className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-3"
+              style={{ width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <svg className="w-6 h-6 text-indigo-400" width={24} height={24} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+              </svg>
+            </div>
+            <p className="text-sm font-medium text-gray-600">All clear — no jobs awaiting factory QC</p>
+            <p className="text-xs text-gray-400 mt-1">
+              Jobs appear here when a manufacturing unit marks production complete.
+            </p>
+          </div>
+        )}
+
+        {jobs.length > 0 && (
+          <div className="space-y-3">
+            {jobs.map((job) => (
+              <JobRow key={job.id} job={job} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ══ Section 2: Site installation reports — the after-visit ═════════ */}
+      <div className="space-y-4 pt-6 border-t border-gray-200">
+        <div>
+          <h1 className="text-xl font-bold text-gray-900">Site Installation Reports</h1>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Independent after-visit — verify everything installed correctly at the school —{' '}
+            {siteReportLocations.length === 0 ? 'no sites awaiting a report' : `${siteReportLocations.length} site${siteReportLocations.length !== 1 ? 's' : ''} ready`}
+          </p>
         </div>
-      )}
+
+        {!fetchError && siteReportLocations.length === 0 && (
+          <div className="rounded-xl border border-gray-200 bg-white px-4 py-10 text-center">
+            <p className="text-sm font-medium text-gray-600">All clear — no sites awaiting a report</p>
+            <p className="text-xs text-gray-400 mt-1">
+              Sites appear here once the field agent confirms delivery.
+            </p>
+          </div>
+        )}
+
+        {siteReportLocations.length > 0 && (
+          <div className="space-y-3">
+            {siteReportLocations.map((loc) => (
+              <SiteReportRow key={loc.id} loc={loc} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

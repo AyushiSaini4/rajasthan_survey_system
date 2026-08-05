@@ -72,6 +72,39 @@ export async function getJobsForQC(): Promise<ProductionJobForQC[]> {
   return (data ?? []) as unknown as ProductionJobForQC[]
 }
 
+// ─── Site installation reports awaiting QC's after-visit ──────────────────────
+// Second, independent QC step — distinct from the factory-floor check above.
+// Locations land here once the field agent confirms delivery; the QC
+// inspector then visits the school and files the completion certificate at
+// /qc/install/[locationId] (moved from the field agent's role — see that
+// route's actions.ts for why).
+
+export interface LocationAwaitingSiteReport {
+  id: string
+  location_code: string
+  name: string | null
+  district: string | null
+  block: string | null
+  village: string | null
+}
+
+export async function getLocationsAwaitingSiteReport(): Promise<LocationAwaitingSiteReport[]> {
+  const adminClient = createAdminClient()
+
+  const { data, error } = await adminClient
+    .from('locations')
+    .select('id, location_code, name, district, block, village')
+    .eq('status', 'delivered')
+    .order('location_code', { ascending: true })
+
+  if (error) {
+    console.error('[getLocationsAwaitingSiteReport]', error.message)
+    throw new Error('Failed to fetch site-visit queue')
+  }
+
+  return (data ?? []) as unknown as LocationAwaitingSiteReport[]
+}
+
 /**
  * Returns a single job by ID, only if its status is 'complete'.
  * Returning null for other statuses prevents inspecting already-processed jobs.
