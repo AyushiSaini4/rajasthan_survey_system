@@ -149,28 +149,35 @@ export interface Survey {
   submitted_at: string
   synced_at: string | null
 
-  // Section 3 — GPS (toilet location + ramp start/end)
+  // Toilet-site GPS — captured alongside the toilet_site_photo field
   gps_lat: number | null
   gps_lng: number | null
   gps_accuracy: number | null
+  /** @deprecated unused since the 4-section reduced questionnaire (2026-08-10) — kept for historical reports */
   ramp_gps_lat: number | null
+  /** @deprecated unused since the 4-section reduced questionnaire (2026-08-10) — kept for historical reports */
   ramp_gps_lng: number | null
+  /** @deprecated unused since the 4-section reduced questionnaire (2026-08-10) — kept for historical reports */
   ramp_gps_accuracy: number | null
+  /** @deprecated unused since the 4-section reduced questionnaire (2026-08-10) — kept for historical reports */
   gps_accuracy_screenshot: string | null
 
-  // Sections 1–2, 4–14, 16 — full CWSN questionnaire answers
+  // Sections 1–2 — full CWSN questionnaire answers (non-photo fields)
   // (see lib/survey/questionnaire.ts for the field-id schema)
   answers: Record<string, string | boolean | number | null>
 
-  // Section 15 — the 10 mandatory named photo angles, keyed by slot id
+  // Section 3 — the 7 mandatory named photo angles, keyed by slot id
   named_photos: Record<string, string>
-  // Additional supporting photos (obstacles, ramp alignment, etc.)
+  // Section 2 — inline questionnaire photo fields (toilet site, ramp,
+  // tactile route, braille layout, obstructions), keyed by field id
+  field_attachments: Record<string, string[]>
+  /** @deprecated unused since the 4-section reduced questionnaire (2026-08-10) — kept for historical reports */
   photos: string[]
   videos: string[]
-  // Section 11 — Braille layout map attachments
+  /** @deprecated unused since the 4-section reduced questionnaire (2026-08-10) — kept for historical reports */
   layout_map_photos: string[]
 
-  // Section 17 — Declaration
+  // Section 4 — Declaration
   team_name: string | null
   team_signature: string | null
   authority_name: string | null

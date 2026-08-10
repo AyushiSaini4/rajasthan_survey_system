@@ -7,9 +7,9 @@ import imageCompression from 'browser-image-compression'
 import type SignatureCanvasInstance from 'react-signature-canvas'
 import { createClient } from '@/lib/supabase/client'
 import GPSCapture, { type GPSCoords } from '@/components/survey/GPSCapture'
-import PhotoUploader from '@/components/survey/PhotoUploader'
 import NamedPhotoSlot from '@/components/survey/NamedPhotoSlot'
 import QuestionnaireFieldInput from '@/components/survey/QuestionnaireFieldInput'
+import InlinePhotoField from '@/components/survey/InlinePhotoField'
 import SchoolSearchCombobox from '@/components/survey/SchoolSearchCombobox'
 import { submitSurvey, type PhotoMeta } from '@/app/agent/survey/actions'
 import { enqueueSurvey, removeSurvey } from '@/lib/offline/surveyQueue'
@@ -18,6 +18,7 @@ import {
   MANDATORY_PHOTO_SLOTS,
   validateAnswers,
   type Answers,
+  type QuestionnaireField,
 } from '@/lib/survey/questionnaire'
 import type { Location } from '@/types'
 
@@ -59,27 +60,25 @@ interface Props {
 export default function SurveyFormClient({ location }: Props) {
   const router = useRouter()
 
-  // ── GPS: toilet location + ramp start/end (Section 3) ──────────────────────
-  const [gps, setGps]         = useState<GPSCoords | null>(null)
-  const [rampGps, setRampGps] = useState<GPSCoords | null>(null)
-  const [gpsAccuracyScreenshot, setGpsAccuracyScreenshot] = useState<File | null>(null)
+  // ── Toilet-site GPS — captured alongside the toilet_site_photo field ───────
+  const [gps, setGps] = useState<GPSCoords | null>(null)
 
-  // ── Sections 1–2, 4–14, 16 — all dynamic questionnaire answers ─────────────
+  // ── Sections 1–2 — all dynamic questionnaire answers ────────────────────────
   const [answers, setAnswers] = useState<Answers>({})
   function setAnswer(fieldId: string, value: Answers[string]) {
     setAnswers((prev) => ({ ...prev, [fieldId]: value }))
   }
 
-  // ── Section 15 — 10 mandatory named photos ──────────────────────────────────
+  // ── Section 2 — inline photo fields (toilet/ramp/tactile/braille/obstruction) ─
+  const [photoFields, setPhotoFields] = useState<Record<string, File[]>>({})
+  function setPhotoField(fieldId: string, files: File[]) {
+    setPhotoFields((prev) => ({ ...prev, [fieldId]: files }))
+  }
+
+  // ── Section 3 — 7 mandatory named photos ────────────────────────────────────
   const [mandatoryPhotos, setMandatoryPhotos] = useState<Record<string, File | null>>({})
 
-  // ── Extra Section 15 shots (proposed toilet location, ramp alignment, etc.) ─
-  const [additionalPhotos, setAdditionalPhotos] = useState<File[]>([])
-
-  // ── Section 11 — Braille layout map attachments ─────────────────────────────
-  const [layoutMapPhotos, setLayoutMapPhotos] = useState<File[]>([])
-
-  // ── Section 17 — Declaration ─────────────────────────────────────────────────
+  // ── Section 4 — Declaration ──────────────────────────────────────────────────
   const [teamName, setTeamName]                     = useState('')
   const [authorityName, setAuthorityName]           = useState('')
   const [authorityDesignation, setAuthorityDesignation] = useState('')
@@ -135,22 +134,38 @@ export default function SurveyFormClient({ location }: Props) {
     return paths
   }
 
+  // ── Photo-type fields, in questionnaire order (drives rendering + validation) ─
+  const photoFieldDefs: QuestionnaireField[] = QUESTIONNAIRE.flatMap((s) => s.fields).filter((f) => f.type === 'photo')
+
+  function isFieldVisible(field: QuestionnaireField): boolean {
+    if (!field.showIf) return true
+    return answers[field.showIf.fieldId] === field.showIf.equals
+  }
+
   // ── Validation ─────────────────────────────────────────────────────────────
   function validate(): string | null {
     const questionnaireError = validateAnswers(answers)
     if (questionnaireError) return questionnaireError
 
-    const missingSlots = MANDATORY_PHOTO_SLOTS.filter((s) => !mandatoryPhotos[s.id])
-    if (missingSlots.length > 0) {
-      return `Please add all 10 mandatory photos — missing: ${missingSlots.map((s) => s.label).join(', ')}.`
+    for (const field of photoFieldDefs) {
+      if (!field.required) continue
+      if (!isFieldVisible(field)) continue
+      if (!(photoFields[field.id]?.length)) {
+        return `Section 2 — Authority Details & Approval: "${field.label}" is required.`
+      }
     }
 
-    if (!teamName.trim()) return 'Please enter the Survey Team name (Section 17 — Declaration).'
-    if (!authorityName.trim()) return 'Please enter the School Authority name (Section 17 — Declaration).'
+    const missingSlots = MANDATORY_PHOTO_SLOTS.filter((s) => !mandatoryPhotos[s.id])
+    if (missingSlots.length > 0) {
+      return `Please add all ${MANDATORY_PHOTO_SLOTS.length} mandatory photos — missing: ${missingSlots.map((s) => s.label).join(', ')}.`
+    }
+
+    if (!teamName.trim()) return 'Please enter the Survey Team name (Section 4 — Declaration).'
+    if (!authorityName.trim()) return 'Please enter the School Authority name (Section 4 — Declaration).'
     if (!teamSigRef.current || teamSigRef.current.isEmpty())
-      return 'Please capture the Survey Team signature (Section 17).'
+      return 'Please capture the Survey Team signature (Section 4).'
     if (!authoritySigRef.current || authoritySigRef.current.isEmpty())
-      return 'Please capture the School Authority signature (Section 17).'
+      return 'Please capture the School Authority signature (Section 4).'
 
     return null
   }
@@ -172,8 +187,8 @@ export default function SurveyFormClient({ location }: Props) {
     setSubmitting(true)
     try {
       // ── Step 1: Build one ordered file list + parallel metadata ────────────
-      // Order: mandatory (10, fixed order) → additional → layout map →
-      // gps accuracy screenshot → signatures (team, authority)
+      // Order: mandatory (7, fixed order) → field photos (questionnaire order)
+      // → signatures (team, authority)
       const orderedFiles: File[] = []
       const photoMeta: PhotoMeta[] = []
 
@@ -184,17 +199,13 @@ export default function SurveyFormClient({ location }: Props) {
           photoMeta.push({ kind: 'mandatory', slotId: slot.id })
         }
       }
-      additionalPhotos.forEach((f) => {
-        orderedFiles.push(f)
-        photoMeta.push({ kind: 'additional' })
-      })
-      layoutMapPhotos.forEach((f) => {
-        orderedFiles.push(f)
-        photoMeta.push({ kind: 'layoutmap' })
-      })
-      if (gpsAccuracyScreenshot) {
-        orderedFiles.push(gpsAccuracyScreenshot)
-        photoMeta.push({ kind: 'gpsaccuracy' })
+
+      for (const field of photoFieldDefs) {
+        const files = photoFields[field.id] ?? []
+        for (const f of files) {
+          orderedFiles.push(f)
+          photoMeta.push({ kind: 'field_photo', fieldId: field.id })
+        }
       }
 
       // Note: intentionally using toDataURL() directly rather than
@@ -223,9 +234,6 @@ export default function SurveyFormClient({ location }: Props) {
         gpsLat: gps?.lat ?? null,
         gpsLng: gps?.lng ?? null,
         gpsAccuracy: gps?.accuracy ?? null,
-        rampGpsLat: rampGps?.lat ?? null,
-        rampGpsLng: rampGps?.lng ?? null,
-        rampGpsAccuracy: rampGps?.accuracy ?? null,
         answers,
         photoMeta,
         teamName,
@@ -296,6 +304,57 @@ export default function SurveyFormClient({ location }: Props) {
     )
   }
 
+  // ── Field renderer — intercepts 'photo' fields before QuestionnaireFieldInput ─
+  function renderField(field: QuestionnaireField) {
+    if (!isFieldVisible(field)) return null
+
+    if (field.type === 'photo') {
+      return (
+        <InlinePhotoField
+          key={field.id}
+          label={field.label}
+          files={photoFields[field.id] ?? []}
+          onChange={(files) => setPhotoField(field.id, files)}
+          maxPhotos={field.maxPhotos ?? 1}
+          required={field.required}
+          disabled={submitting}
+          gps={field.requiresGps ? { captured: gps, onCapture: setGps } : undefined}
+        />
+      )
+    }
+
+    if (field.id === 'school_name') {
+      return (
+        <SchoolSearchCombobox
+          key="school_search"
+          schoolName={typeof answers.school_name === 'string' ? answers.school_name : ''}
+          udiseCode={typeof answers.udise_code === 'string' ? answers.udise_code : ''}
+          onSchoolNameChange={(v) => setAnswer('school_name', v)}
+          onUdiseCodeChange={(v) => setAnswer('udise_code', v)}
+          onSelectSchool={(school) => {
+            setAnswer('school_name', school.school_name)
+            setAnswer('udise_code', school.udise_code)
+            // Only backfill — never overwrite what the agent already typed.
+            if (school.district && !answers.district) setAnswer('district', school.district)
+            if (school.block && !answers.block) setAnswer('block', school.block)
+          }}
+          disabled={submitting}
+        />
+      )
+    }
+    if (field.id === 'udise_code') return null // captured by SchoolSearchCombobox above
+
+    return (
+      <QuestionnaireFieldInput
+        key={field.id}
+        field={field}
+        value={answers[field.id] ?? null}
+        onChange={(v) => setAnswer(field.id, v)}
+        disabled={submitting}
+      />
+    )
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-5 pb-6">
 
@@ -319,112 +378,22 @@ export default function SurveyFormClient({ location }: Props) {
       </Card>
 
       {/* ── Sections 1–2: dynamic ────────────────────────────────────────── */}
-      {QUESTIONNAIRE.slice(0, 2).map((section) => (
+      {QUESTIONNAIRE.map((section) => (
         <Card key={section.id} className="space-y-4">
           <SectionTitle>{section.title}</SectionTitle>
-          {section.fields
-            .filter((f) => !f.showIf || answers[f.showIf.fieldId] === f.showIf.equals)
-            // udise_code is captured by SchoolSearchCombobox below, alongside
-            // school_name — drop it from the generic field loop so it isn't
-            // rendered twice.
-            .filter((f) => !(section.id === 'basic_details' && f.id === 'udise_code'))
-            .map((field) => {
-              if (section.id === 'basic_details' && field.id === 'school_name') {
-                return (
-                  <SchoolSearchCombobox
-                    key="school_search"
-                    schoolName={typeof answers.school_name === 'string' ? answers.school_name : ''}
-                    udiseCode={typeof answers.udise_code === 'string' ? answers.udise_code : ''}
-                    onSchoolNameChange={(v) => setAnswer('school_name', v)}
-                    onUdiseCodeChange={(v) => setAnswer('udise_code', v)}
-                    onSelectSchool={(school) => {
-                      setAnswer('school_name', school.school_name)
-                      setAnswer('udise_code', school.udise_code)
-                      // Only backfill — never overwrite what the agent already typed.
-                      // (cwsn_schools has no village column — village/town stays manual.)
-                      if (school.district && !answers.district) setAnswer('district', school.district)
-                      if (school.block && !answers.block) setAnswer('block', school.block)
-                    }}
-                    disabled={submitting}
-                  />
-                )
-              }
-              return (
-                <QuestionnaireFieldInput
-                  key={field.id}
-                  field={field}
-                  value={answers[field.id] ?? null}
-                  onChange={(v) => setAnswer(field.id, v)}
-                  disabled={submitting}
-                />
-              )
-            })}
+          {section.fields.map(renderField)}
         </Card>
       ))}
 
-      {/* ── Section 3: GPS & Site Location ──────────────────────────────── */}
-      <section className="space-y-3">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
-          Section 3 — GPS &amp; Site Location Details
-        </p>
-        <div>
-          <p className="text-xs font-medium text-gray-600 mb-1.5">Toilet Location</p>
-          <GPSCapture onCapture={setGps} captured={gps} />
-        </div>
-        <div>
-          <p className="text-xs font-medium text-gray-600 mb-1.5">Ramp Start / End</p>
-          <GPSCapture onCapture={setRampGps} captured={rampGps} />
-        </div>
-        <Card>
-          <p className="text-sm font-medium text-gray-700 mb-2">GPS Accuracy Screenshot</p>
-          <PhotoUploader
-            files={gpsAccuracyScreenshot ? [gpsAccuracyScreenshot] : []}
-            onChange={(files) => setGpsAccuracyScreenshot(files[0] ?? null)}
-            disabled={submitting}
-            maxPhotos={1}
-          />
-        </Card>
-        {(!gps || !rampGps) && (
-          <p className="text-xs text-amber-600">
-            GPS not fully captured — the form can still be submitted, but location proof is recommended.
-          </p>
-        )}
-      </section>
-
-      {/* ── Sections 4–14, 16: dynamic ──────────────────────────────────── */}
-      {QUESTIONNAIRE.slice(2).map((section) => (
-        <Card key={section.id} className="space-y-4">
-          <SectionTitle>{section.title}</SectionTitle>
-          {section.fields
-            .filter((f) => !f.showIf || answers[f.showIf.fieldId] === f.showIf.equals)
-            .map((field) => (
-              <QuestionnaireFieldInput
-                key={field.id}
-                field={field}
-                value={answers[field.id] ?? null}
-                onChange={(v) => setAnswer(field.id, v)}
-                disabled={submitting}
-              />
-            ))}
-        </Card>
-      ))}
-
-      {/* ── Section 11 attachment: Braille layout map ───────────────────── */}
-      <Card>
-        <SectionTitle>Section 11 — Attach Layout Map</SectionTitle>
-        <p className="text-xs text-gray-500 mb-2">Hand-drawn / printed map, and digital layout if available.</p>
-        <PhotoUploader files={layoutMapPhotos} onChange={setLayoutMapPhotos} disabled={submitting} maxPhotos={3} />
-      </Card>
-
-      {/* ── Section 15: mandatory photo documentation ───────────────────── */}
+      {/* ── Section 3: mandatory photo documentation ────────────────────── */}
       <Card>
         <div className="flex items-center justify-between mb-1">
-          <SectionTitle>Section 15 — Photo Documentation</SectionTitle>
+          <SectionTitle>Section 3 — Photo Documentation</SectionTitle>
           <span className="text-xs text-gray-400 -mt-3">
-            {Object.values(mandatoryPhotos).filter(Boolean).length}/10
+            {Object.values(mandatoryPhotos).filter(Boolean).length}/{MANDATORY_PHOTO_SLOTS.length}
           </span>
         </div>
-        <p className="text-xs text-gray-500 mb-3">All 10 angles are mandatory.</p>
+        <p className="text-xs text-gray-500 mb-3">All {MANDATORY_PHOTO_SLOTS.length} angles are mandatory.</p>
         <div className="grid grid-cols-3 gap-2">
           {MANDATORY_PHOTO_SLOTS.map((slot, i) => (
             <NamedPhotoSlot
@@ -437,18 +406,11 @@ export default function SurveyFormClient({ location }: Props) {
             />
           ))}
         </div>
-
-        <div className="border-t border-gray-100 mt-4 pt-4">
-          <p className="text-sm font-medium text-gray-700 mb-2">
-            Additional Photos <span className="text-gray-400 font-normal">(obstacles, proposed toilet location, ramp alignment, tactile route, etc.)</span>
-          </p>
-          <PhotoUploader files={additionalPhotos} onChange={setAdditionalPhotos} disabled={submitting} maxPhotos={10} />
-        </div>
       </Card>
 
-      {/* ── Section 17: Declaration ──────────────────────────────────────── */}
+      {/* ── Section 4: Declaration ──────────────────────────────────────── */}
       <Card className="space-y-5">
-        <SectionTitle>Section 17 — Declaration</SectionTitle>
+        <SectionTitle>Section 4 — Declaration</SectionTitle>
 
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">By Survey Team</p>

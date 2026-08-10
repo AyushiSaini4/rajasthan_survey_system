@@ -89,10 +89,14 @@ export default async function LocationDetailPage({ params }: Props) {
   if (!data) notFound()
 
   const {
-    location, survey, surveyPhotoUrls, namedPhotoUrls, layoutMapPhotoUrls,
+    location, survey, surveyPhotoUrls, namedPhotoUrls, fieldAttachmentUrls, layoutMapPhotoUrls,
     gpsAccuracyScreenshotUrl, teamSignatureUrl, authoritySignatureUrl,
     activeUnits, productionJob, assignedUnit, qcInspections, sanctionedSchool,
   } = data
+
+  const photoFieldLabels: Record<string, string> = Object.fromEntries(
+    QUESTIONNAIRE.flatMap((s) => s.fields).filter((f) => f.type === 'photo').map((f) => [f.id, f.label])
+  )
 
   return (
     <div className="max-w-4xl mx-auto space-y-5 pb-12">
@@ -170,29 +174,57 @@ export default async function LocationDetailPage({ params }: Props) {
               </a>
             )}
 
-            {/* ── All 15 dynamic questionnaire sections ─────────────────── */}
-            {QUESTIONNAIRE.map((section) => (
-              <div key={section.id}>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{section.title}</h3>
-                <table className="w-full text-sm border-collapse">
-                  <tbody>
-                    {section.fields.map((field, i) => {
-                      const value = survey.answers?.[field.id]
-                      return (
-                        <tr key={field.id} className={i % 2 === 0 ? '' : 'bg-gray-50'}>
-                          <td className="px-3 py-2 border border-gray-200 font-medium text-gray-700 w-1/2">{field.label}</td>
-                          <td className="px-3 py-2 border border-gray-200 text-gray-900">
-                            {typeof value === 'boolean' ? <BoolCell value={value} /> : (value ?? <span className="text-gray-400">—</span>)}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ))}
+            {/* ── Sections 1–2: dynamic questionnaire fields ─────────────── */}
+            {QUESTIONNAIRE.map((section) => {
+              const rows = section.fields.filter((f) => f.type !== 'photo')
+              if (rows.length === 0) return null
+              return (
+                <div key={section.id}>
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{section.title}</h3>
+                  <table className="w-full text-sm border-collapse">
+                    <tbody>
+                      {rows.map((field, i) => {
+                        const value = survey.answers?.[field.id]
+                        return (
+                          <tr key={field.id} className={i % 2 === 0 ? '' : 'bg-gray-50'}>
+                            <td className="px-3 py-2 border border-gray-200 font-medium text-gray-700 w-1/2">{field.label}</td>
+                            <td className="px-3 py-2 border border-gray-200 text-gray-900">
+                              {typeof value === 'boolean' ? <BoolCell value={value} /> : (value ?? <span className="text-gray-400">—</span>)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })}
 
-            {/* ── Section 11 — Braille layout map ──────────────────────────── */}
+            {/* ── Section 2 — inline photo fields (toilet site, ramp, tactile route, braille layout, obstructions) ── */}
+            {Object.keys(fieldAttachmentUrls).length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Field Photos</h3>
+                <div className="space-y-4">
+                  {Object.entries(fieldAttachmentUrls).map(([fieldId, urls]) => (
+                    urls.length > 0 && (
+                      <div key={fieldId}>
+                        <p className="text-xs text-gray-500 mb-1.5">{photoFieldLabels[fieldId] ?? fieldId}</p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {urls.map((url, i) => (
+                            <a key={i} href={url} target="_blank" rel="noreferrer">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={url} alt={`${photoFieldLabels[fieldId] ?? fieldId} ${i + 1}`} className="w-full h-36 object-cover rounded-lg border border-gray-200 hover:opacity-90 transition-opacity" />
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Braille layout map — legacy freeform attachment (pre-2026-08-10 surveys only) ── */}
             {layoutMapPhotoUrls.length > 0 && (
               <div>
                 <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Section 11 — Braille Layout Map</h3>
@@ -207,10 +239,10 @@ export default async function LocationDetailPage({ params }: Props) {
               </div>
             )}
 
-            {/* ── Section 15 — mandatory named photos ──────────────────────── */}
+            {/* ── Section 3 — mandatory named photos ──────────────────────── */}
             <div>
               <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                Section 15 — Photo Documentation ({Object.keys(namedPhotoUrls).length}/10)
+                Section 3 — Photo Documentation ({Object.keys(namedPhotoUrls).length}/{MANDATORY_PHOTO_SLOTS.length})
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                 {MANDATORY_PHOTO_SLOTS.map((slot, i) => {
@@ -246,9 +278,9 @@ export default async function LocationDetailPage({ params }: Props) {
               </div>
             )}
 
-            {/* ── Section 17 — Declaration ──────────────────────────────────── */}
+            {/* ── Section 4 — Declaration ──────────────────────────────────── */}
             <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Section 17 — Declaration</h3>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Section 4 — Declaration</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="border border-gray-200 rounded-lg p-3">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Survey Team</p>

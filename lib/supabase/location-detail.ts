@@ -30,8 +30,10 @@ export interface LocationDetailData {
   location: Location
   survey: Survey | null
   surveyPhotoUrls: string[]
-  /** Section 15 mandatory photos, keyed by slot id → signed URL */
+  /** Section 3 mandatory photos, keyed by slot id → signed URL */
   namedPhotoUrls: Record<string, string>
+  /** Section 2 inline photo fields, keyed by field id → signed URLs */
+  fieldAttachmentUrls: Record<string, string[]>
   layoutMapPhotoUrls: string[]
   gpsAccuracyScreenshotUrl: string | null
   teamSignatureUrl: string | null
@@ -140,6 +142,20 @@ export async function getLocationDetailData(id: string): Promise<LocationDetailD
     })
   }
 
+  // Section 2 inline photo fields — each field id maps to an array of paths.
+  const fieldAttachmentUrls: Record<string, string[]> = {}
+  if (survey?.field_attachments && Object.keys(survey.field_attachments).length > 0) {
+    const fieldIds = Object.keys(survey.field_attachments)
+    const allPaths = fieldIds.flatMap((id) => survey.field_attachments[id])
+    const allUrls = await signPhotoPaths(allPaths, 'survey-media')
+    let cursorFA = 0
+    for (const id of fieldIds) {
+      const count = survey.field_attachments[id].length
+      fieldAttachmentUrls[id] = allUrls.slice(cursorFA, cursorFA + count).filter(Boolean)
+      cursorFA += count
+    }
+  }
+
   const singleFileUrls = await signPhotoPaths(
     [survey?.gps_accuracy_screenshot, survey?.team_signature, survey?.authority_signature].filter(
       (p): p is string => Boolean(p),
@@ -156,6 +172,7 @@ export async function getLocationDetailData(id: string): Promise<LocationDetailD
     survey,
     surveyPhotoUrls,
     namedPhotoUrls,
+    fieldAttachmentUrls,
     layoutMapPhotoUrls,
     gpsAccuracyScreenshotUrl,
     teamSignatureUrl,

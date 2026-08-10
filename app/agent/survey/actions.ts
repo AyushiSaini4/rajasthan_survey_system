@@ -9,40 +9,37 @@ import type { Answers } from '@/lib/survey/questionnaire'
 /**
  * Tags each entry in `photoPaths` so the server can route it to the right
  * column after upload. Built client-side in the same order photos were
- * compressed/uploaded — see SurveyFormClient's `buildPhotoManifest`.
+ * compressed/uploaded — see SurveyFormClient's handleSubmit.
  */
-export type PhotoKind = 'mandatory' | 'additional' | 'layoutmap' | 'gpsaccuracy' | 'signature'
+export type PhotoKind = 'mandatory' | 'field_photo' | 'signature'
 
 export interface PhotoMeta {
   kind: PhotoKind
   /** Slot id for 'mandatory' (see MANDATORY_PHOTO_SLOTS) or 'team'/'authority' for 'signature'. */
   slotId?: string
+  /** Questionnaire field id for 'field_photo' (e.g. 'toilet_site_photo'). */
+  fieldId?: string
 }
 
 export interface SurveySubmission {
   locationId: string
 
-  // Section 3 — GPS (toilet location)
+  // Section 2 — toilet-site GPS, captured alongside toilet_site_photo
   gpsLat: number | null
   gpsLng: number | null
   gpsAccuracy: number | null
 
-  // Section 3 — GPS (ramp start/end)
-  rampGpsLat: number | null
-  rampGpsLng: number | null
-  rampGpsAccuracy: number | null
-
-  // Sections 1–2, 4–14, 16
+  // Sections 1–2 (non-photo fields)
   answers: Answers
 
-  // Sections 15, 11 (layout map), 3 (accuracy screenshot), 17 (signatures) —
-  // all photos travel together as one ordered list + parallel metadata so
-  // the offline queue (which only knows how to store generic File[]) never
-  // needs to understand the questionnaire's structure.
+  // Sections 2 (inline field photos) and 3 (mandatory named photos), plus
+  // Section 4 signatures — all photos travel together as one ordered list +
+  // parallel metadata so the offline queue (which only knows how to store
+  // generic File[]) never needs to understand the questionnaire's structure.
   photoPaths: string[]
   photoMeta: PhotoMeta[]
 
-  // Section 17 — Declaration
+  // Section 4 — Declaration
   teamName: string
   authorityName: string
   authorityDesignation: string
@@ -62,8 +59,8 @@ export type SurveyResult =
  * 1. Verify auth (server client uses the user's JWT cookie)
  * 2. Verify the location is assigned to this agent (via RLS on server client)
  * 3. Guard against duplicate submissions (status !== 'pending')
- * 4. Reconstruct structured photo fields (named_photos, layout map,
- *    gps accuracy screenshot, signatures) from the flat photoPaths/photoMeta
+ * 4. Reconstruct structured photo fields (named_photos, field_attachments,
+ *    signatures) from the flat photoPaths/photoMeta
  * 5. INSERT into surveys (field_agent has INSERT via RLS)
  * 6. UPDATE locations.status → 'surveyed' (requires admin client — field_agent
  *    does not have UPDATE on locations per RLS policy)
@@ -105,9 +102,7 @@ export async function submitSurvey(data: SurveySubmission): Promise<SurveyResult
 
   // ── 4. Reconstruct structured photo fields from the flat list ──────────────
   const namedPhotos: Record<string, string> = {}
-  const additionalPhotos: string[] = []
-  const layoutMapPhotos: string[] = []
-  let gpsAccuracyScreenshot: string | null = null
+  const fieldAttachments: Record<string, string[]> = {}
   let teamSignature: string | null = null
   let authoritySignature: string | null = null
 
@@ -118,14 +113,11 @@ export async function submitSurvey(data: SurveySubmission): Promise<SurveyResult
       case 'mandatory':
         if (meta.slotId) namedPhotos[meta.slotId] = path
         break
-      case 'additional':
-        additionalPhotos.push(path)
-        break
-      case 'layoutmap':
-        layoutMapPhotos.push(path)
-        break
-      case 'gpsaccuracy':
-        gpsAccuracyScreenshot = path
+      case 'field_photo':
+        if (meta.fieldId) {
+          if (!fieldAttachments[meta.fieldId]) fieldAttachments[meta.fieldId] = []
+          fieldAttachments[meta.fieldId].push(path)
+        }
         break
       case 'signature':
         if (meta.slotId === 'team') teamSignature = path
@@ -142,15 +134,11 @@ export async function submitSurvey(data: SurveySubmission): Promise<SurveyResult
     gps_lat: data.gpsLat,
     gps_lng: data.gpsLng,
     gps_accuracy: data.gpsAccuracy,
-    ramp_gps_lat: data.rampGpsLat,
-    ramp_gps_lng: data.rampGpsLng,
-    ramp_gps_accuracy: data.rampGpsAccuracy,
-    gps_accuracy_screenshot: gpsAccuracyScreenshot,
 
     answers: data.answers,
     named_photos: namedPhotos,
-    photos: additionalPhotos,
-    layout_map_photos: layoutMapPhotos,
+    field_attachments: fieldAttachments,
+    photos: [],
     videos: [],
 
     team_name: data.teamName.trim() || null,
