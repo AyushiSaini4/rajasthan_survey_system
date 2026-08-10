@@ -5,6 +5,7 @@ import LocationTimeline from '@/components/admin/LocationTimeline'
 import LocationStatusBadge from '@/components/shared/LocationStatusBadge'
 import AssignUnitSection from '@/components/admin/AssignUnitSection'
 import UnassignUnitButton from '@/components/admin/UnassignUnitButton'
+import UnsurveyButton from '@/components/admin/UnsurveyButton'
 import AssignAgentSection from '@/components/admin/AssignAgentSection'
 import EditProductionQuantities from '@/components/admin/EditProductionQuantities'
 import PrintButton from '@/components/admin/PrintButton'
@@ -31,11 +32,12 @@ function BoolCell({ value }: { value: boolean | null | undefined }) {
   return value ? <span className="text-green-600 font-medium">Yes</span> : <span className="text-red-500 font-medium">No</span>
 }
 
-function Section({ title, children, className = '' }: { title: string; children: React.ReactNode; className?: string }) {
+function Section({ title, children, className = '', action }: { title: string; children: React.ReactNode; className?: string; action?: React.ReactNode }) {
   return (
     <div className={`bg-white rounded-lg border border-gray-200 ${className}`}>
-      <div className="px-5 py-3 border-b border-gray-100">
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
         <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">{title}</h2>
+        {action}
       </div>
       <div className="p-5">{children}</div>
     </div>
@@ -156,7 +158,7 @@ export default async function LocationDetailPage({ params }: Props) {
       </Section>
 
       {survey ? (
-        <Section title="Survey Data — CWSN Questionnaire">
+        <Section title="Survey Data — CWSN Questionnaire" action={<UnsurveyButton locationId={location.id} />}>
           <div className="space-y-6">
             <InfoGrid rows={[
               ['Submitted', formatDate(survey.submitted_at)],

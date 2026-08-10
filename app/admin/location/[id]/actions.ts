@@ -290,3 +290,71 @@ export async function unassignUnitFromLocation(
   revalidatePath('/unit/dashboard')
   return { success: true }
 }
+
+// ─── Unsurvey a location ────────────────────────────────────────────────────
+// Deletes the survey record and reverts the location to 'pending', so the
+// field agent can redo it cleanly through the normal /agent/survey flow.
+// Refuses once a production job exists for this location — unassign the unit
+// first (which itself refuses once real production work has started), then
+// unsurvey. Chaining the two guards this way means a location can only ever
+// be unwound one real step at a time, never skipping past work that's
+// already happened downstream.
+//
+// Note: this does not clean up already-uploaded survey photos/signatures in
+// storage — the DB record is removed, but the files themselves are left
+// behind as orphans. Acceptable for an internal admin reset action; not
+// something to build out further unless storage cost becomes a real issue.
+
+export async function unsurveyLocation(
+  locationId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) return { success: false, error: 'Not authenticated' }
+  const role = user.app_metadata?.role as string | undefined
+  if (role !== 'admin') return { success: false, error: 'Forbidden — admin only' }
+
+  const admin = createAdminClient()
+
+  const { data: job, error: jobFetchError } = await admin
+    .from('production_jobs')
+    .select('id')
+    .eq('location_id', locationId)
+    .limit(1)
+    .maybeSingle()
+
+  if (jobFetchError) {
+    console.error('[unsurveyLocation] job fetch error:', jobFetchError.message)
+    return { success: false, error: 'Failed to check for an existing production job' }
+  }
+
+  if (job) {
+    return {
+      success: false,
+      error: 'Cannot unsurvey — a manufacturing unit is already assigned. Unassign the unit first, then unsurvey.',
+    }
+  }
+
+  const { error: deleteError } = await admin.from('surveys').delete().eq('location_id', locationId)
+
+  if (deleteError) {
+    console.error('[unsurveyLocation] survey delete error:', deleteError.message)
+    return { success: false, error: 'Failed to delete survey' }
+  }
+
+  const { error: locationError } = await admin
+    .from('locations')
+    .update({ status: 'pending' })
+    .eq('id', locationId)
+
+  if (locationError) {
+    console.error('[unsurveyLocation] location update error:', locationError.message)
+    return { success: false, error: 'Failed to revert location status' }
+  }
+
+  revalidatePath(`/admin/location/${locationId}`)
+  revalidatePath('/admin/dashboard')
+  revalidatePath('/agent/dashboard')
+  return { success: true }
+}
