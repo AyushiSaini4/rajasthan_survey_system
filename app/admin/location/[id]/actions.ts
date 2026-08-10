@@ -194,3 +194,99 @@ export async function assignAgentToLocation(
   revalidatePath('/admin/dashboard')
   return { success: true }
 }
+
+// ─── Unassign a field agent from a location ────────────────────────────────
+// Clears assigned_agent only — does not touch status or any survey data
+// already submitted. Safe at any point in the location's lifecycle.
+
+export async function unassignAgentFromLocation(
+  locationId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) return { success: false, error: 'Not authenticated' }
+  const role = user.app_metadata?.role as string | undefined
+  if (role !== 'admin') return { success: false, error: 'Forbidden — admin only' }
+
+  const admin = createAdminClient()
+
+  const { error: locationError } = await admin
+    .from('locations')
+    .update({ assigned_agent: null })
+    .eq('id', locationId)
+
+  if (locationError) {
+    console.error('[unassignAgentFromLocation] error:', locationError.message)
+    return { success: false, error: 'Failed to unassign agent' }
+  }
+
+  revalidatePath(`/admin/location/${locationId}`)
+  revalidatePath('/admin/dashboard')
+  return { success: true }
+}
+
+// ─── Unassign a manufacturing unit from a location ─────────────────────────
+// This is more involved than unassigning an agent: it deletes the associated
+// production job (if it hasn't started real work — see guard below) and
+// reverts the location's status back to 'surveyed' so it can be reassigned
+// cleanly. Refuses to unassign once production has actually started, since
+// silently deleting a job that's mid-production or already QC'd would lose
+// real work — in that case, admin should resolve it through the normal
+// pipeline (fail QC, etc.) rather than unassigning.
+
+export async function unassignUnitFromLocation(
+  locationId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient()
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+
+  if (authError || !user) return { success: false, error: 'Not authenticated' }
+  const role = user.app_metadata?.role as string | undefined
+  if (role !== 'admin') return { success: false, error: 'Forbidden — admin only' }
+
+  const admin = createAdminClient()
+
+  const { data: job, error: jobFetchError } = await admin
+    .from('production_jobs')
+    .select('id, status')
+    .eq('location_id', locationId)
+    .order('assigned_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (jobFetchError) {
+    console.error('[unassignUnitFromLocation] job fetch error:', jobFetchError.message)
+    return { success: false, error: 'Failed to look up production job' }
+  }
+
+  if (job && job.status !== 'pending') {
+    return {
+      success: false,
+      error: `Cannot unassign — production has already moved to "${job.status}". Resolve through the normal pipeline instead (e.g. fail QC to send it back).`,
+    }
+  }
+
+  if (job) {
+    const { error: deleteError } = await admin.from('production_jobs').delete().eq('id', job.id)
+    if (deleteError) {
+      console.error('[unassignUnitFromLocation] delete error:', deleteError.message)
+      return { success: false, error: 'Failed to remove production job' }
+    }
+  }
+
+  const { error: locationError } = await admin
+    .from('locations')
+    .update({ assigned_unit_id: null, status: 'surveyed' })
+    .eq('id', locationId)
+
+  if (locationError) {
+    console.error('[unassignUnitFromLocation] location update error:', locationError.message)
+    return { success: false, error: 'Failed to revert location status' }
+  }
+
+  revalidatePath(`/admin/location/${locationId}`)
+  revalidatePath('/admin/dashboard')
+  revalidatePath('/unit/dashboard')
+  return { success: true }
+}

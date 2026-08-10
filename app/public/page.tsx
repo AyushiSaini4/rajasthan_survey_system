@@ -65,7 +65,7 @@ export default function PublicDashboard() {
             </div>
             <div>
               <h1 className="text-white font-bold text-sm leading-tight">SNIS Rajasthan</h1>
-              <p className="text-slate-400 text-xs">Public Progress Dashboard</p>
+              <p className="text-slate-400 text-xs">Government Progress Dashboard</p>
             </div>
           </div>
           <div className="flex items-center gap-3">

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { assignAgentToLocation } from '@/app/admin/location/[id]/actions'
+import { assignAgentToLocation, unassignAgentFromLocation } from '@/app/admin/location/[id]/actions'
 
 interface Agent {
   id: string
@@ -19,6 +19,7 @@ export default function AssignAgentSection({ locationId, agents, currentAgentId 
   const router = useRouter()
   const [selectedAgentId, setSelectedAgentId] = useState(currentAgentId ?? '')
   const [loading, setLoading] = useState(false)
+  const [unassigning, setUnassigning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
 
@@ -29,6 +30,15 @@ export default function AssignAgentSection({ locationId, agents, currentAgentId 
     setLoading(false)
     if (!result.success) { setError(result.error ?? 'Assignment failed.'); return }
     setSuccess(true)
+    router.refresh()
+  }
+
+  async function handleUnassign() {
+    if (!confirm('Unassign this field agent from the location? They will no longer see it on their dashboard.')) return
+    setUnassigning(true); setError(null)
+    const result = await unassignAgentFromLocation(locationId)
+    setUnassigning(false)
+    if (!result.success) { setError(result.error ?? 'Unassign failed.'); return }
     router.refresh()
   }
 
@@ -58,7 +68,7 @@ export default function AssignAgentSection({ locationId, agents, currentAgentId 
                 id="agent-select"
                 value={selectedAgentId}
                 onChange={(e) => { setSelectedAgentId(e.target.value); setError(null) }}
-                disabled={loading}
+                disabled={loading || unassigning}
                 className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm
                            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
                            disabled:bg-gray-50 disabled:text-gray-400"
@@ -71,7 +81,7 @@ export default function AssignAgentSection({ locationId, agents, currentAgentId 
             </div>
             <button
               onClick={handleAssign}
-              disabled={loading || !selectedAgentId}
+              disabled={loading || unassigning || !selectedAgentId}
               className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md
                          hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
             >
@@ -85,6 +95,16 @@ export default function AssignAgentSection({ locationId, agents, currentAgentId 
                 </span>
               ) : 'Assign Agent'}
             </button>
+            {currentAgentId && (
+              <button
+                onClick={handleUnassign}
+                disabled={loading || unassigning}
+                className="px-4 py-2 bg-white border border-red-300 text-red-600 text-sm font-medium rounded-md
+                           hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {unassigning ? 'Unassigning…' : 'Unassign'}
+              </button>
+            )}
           </div>
           {error && (
             <p className="text-sm text-red-600 flex items-center gap-1">
@@ -104,3 +124,4 @@ export default function AssignAgentSection({ locationId, agents, currentAgentId 
     </div>
   )
 }
+

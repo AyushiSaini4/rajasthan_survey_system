@@ -1,4 +1,20 @@
 /**
+ * ⚠️ DEPRECATED — DO NOT RUN THIS SCRIPT ⚠️
+ *
+ * This script generates 1,250 SYNTHETIC placeholder schools (real district
+ * and block names, but school names built by combining random syllables —
+ * e.g. "Ram" + "pura" = "Rampura"). It was used early in development before
+ * the real 1,236-school sanction list was imported into cwsn_schools.
+ *
+ * As of supabase/migrations/20260810_real_school_locations.sql, the
+ * `locations` table is seeded directly from the real cwsn_schools data
+ * instead. Running this script again would overwrite real school data with
+ * fake placeholder names. Kept in the repo for historical reference only.
+ *
+ * Original docstring below, for context:
+ */
+
+/**
  * Seed script — inserts 1,250 locations into the Supabase `locations` table.
  *
  * Run with:  npm run seed
@@ -358,6 +374,12 @@ async function seed(): Promise<void> {
   console.log(`  ${'-'.repeat(48)}`)
   console.log(`  ${pad('TOTAL', 20)} ${locations.length}`)
 }
+
+console.error('❌  This script is deprecated and has been disabled.')
+console.error('    It generates fake placeholder schools and would overwrite')
+console.error('    the real 1,236-school data. See the deprecation notice at')
+console.error('    the top of this file. Exiting without doing anything.')
+process.exit(1)
 
 seed().catch((err) => {
   console.error('❌  Unexpected error:', err)

@@ -4,6 +4,7 @@ import { getLocationDetailData, getFieldAgents } from '@/lib/supabase/location-d
 import LocationTimeline from '@/components/admin/LocationTimeline'
 import LocationStatusBadge from '@/components/shared/LocationStatusBadge'
 import AssignUnitSection from '@/components/admin/AssignUnitSection'
+import UnassignUnitButton from '@/components/admin/UnassignUnitButton'
 import AssignAgentSection from '@/components/admin/AssignAgentSection'
 import EditProductionQuantities from '@/components/admin/EditProductionQuantities'
 import PrintButton from '@/components/admin/PrintButton'
@@ -290,14 +291,19 @@ export default async function LocationDetailPage({ params }: Props) {
       {productionJob && (
         <Section title="Production Job">
           <div className="space-y-4">
-            <InfoGrid rows={[
-              ['Job ID', <span key="jid" className="font-mono text-xs">{productionJob.id}</span>],
-              ['Unit', assignedUnit?.name ?? productionJob.unit_id],
-              ['Assigned', formatDate(productionJob.assigned_at)],
-              ['Status', <span key="pjst" className={['inline-block px-2 py-0.5 rounded text-xs font-semibold capitalize', productionJob.status === 'qc_passed' ? 'bg-green-100 text-green-700' : productionJob.status === 'qc_failed' ? 'bg-red-100 text-red-700' : productionJob.status === 'dispatched' ? 'bg-purple-100 text-purple-700' : productionJob.status === 'complete' ? 'bg-blue-100 text-blue-700' : productionJob.status === 'in_production' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'].join(' ')}>{productionJob.status.replace(/_/g, ' ')}</span>],
-              ['Completed', formatDate(productionJob.completed_at)],
-              ['Dispatched', formatDate(productionJob.dispatched_at)],
-            ]} />
+            <div className="flex items-start justify-between gap-3">
+              <InfoGrid rows={[
+                ['Job ID', <span key="jid" className="font-mono text-xs">{productionJob.id}</span>],
+                ['Unit', assignedUnit?.name ?? productionJob.unit_id],
+                ['Assigned', formatDate(productionJob.assigned_at)],
+                ['Status', <span key="pjst" className={['inline-block px-2 py-0.5 rounded text-xs font-semibold capitalize', productionJob.status === 'qc_passed' ? 'bg-green-100 text-green-700' : productionJob.status === 'qc_failed' ? 'bg-red-100 text-red-700' : productionJob.status === 'dispatched' ? 'bg-purple-100 text-purple-700' : productionJob.status === 'complete' ? 'bg-blue-100 text-blue-700' : productionJob.status === 'in_production' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'].join(' ')}>{productionJob.status.replace(/_/g, ' ')}</span>],
+                ['Completed', formatDate(productionJob.completed_at)],
+                ['Dispatched', formatDate(productionJob.dispatched_at)],
+              ]} />
+              {productionJob.status === 'pending' && (
+                <UnassignUnitButton locationId={location.id} />
+              )}
+            </div>
             <div>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-medium text-gray-500">Production Progress</span>
