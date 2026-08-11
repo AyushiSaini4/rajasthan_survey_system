@@ -23,9 +23,16 @@
 
 -- ── 1. Extend public_location_stats with the columns needed to list
 --       individual locations within a status/district drill-down ──────────
+--
+-- Column order matters here: this REPLACES the view created in
+-- 20260804_public_location_stats_view.sql (SELECT status, district ...).
+-- Postgres's CREATE OR REPLACE VIEW only allows new columns to be appended
+-- to the end of the existing list — it errors if you reorder, rename, or
+-- insert existing columns anywhere else. status/district are kept first,
+-- in their original position, with the new columns appended after.
 
 CREATE OR REPLACE VIEW public.public_location_stats AS
-SELECT location_code, name, district, block, status
+SELECT status, district, location_code, name, block
 FROM public.locations;
 
 ALTER VIEW public.public_location_stats SET (security_invoker = off);
