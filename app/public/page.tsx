@@ -7,6 +7,13 @@ import Link from 'next/link'
 type DistrictStat = { district: string; total: number; pending: number; surveyed: number; in_production: number; completed: number }
 type Stats = { total: number; pending: number; surveyed: number; in_production: number; qc_passed: number; installed: number; closed: number }
 
+// District/block names in the source data have inconsistent casing
+// (e.g. "AMBER", "Bassi", "jaipur west") — normalized for display only,
+// never written back, so this never touches the underlying data.
+function titleCase(s: string): string {
+  return s.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+}
+
 export default function PublicDashboard() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [districts, setDistricts] = useState<DistrictStat[]>([])
@@ -18,21 +25,24 @@ export default function PublicDashboard() {
     async function fetchData() {
       // Public/anon visitors can't read public.locations directly (RLS —
       // that table also holds GPS coords, assigned_agent, assigned_unit_id).
-      // public_location_stats is a narrow view exposing only status+district,
-      // granted to the `anon` role — see supabase/migrations/20260804_*.
-      const { data: locations } = await supabase.from('public_location_stats').select('status,district')
-      if (!locations) return
+      // public_location_stats is a narrow view exposing only safe columns,
+      // granted to the `anon` role — see supabase/migrations/20260804_* and
+      // 20260811_public_dashboard_drilldown_views.sql.
+      const { data: rows } = await supabase
+        .from('public_location_stats')
+        .select('location_code,name,district,block,status')
+      if (!rows) return
       setStats({
-        total: locations.length,
-        pending: locations.filter(l => l.status === 'pending').length,
-        surveyed: locations.filter(l => l.status === 'surveyed').length,
-        in_production: locations.filter(l => l.status === 'in_production').length,
-        qc_passed: locations.filter(l => l.status === 'qc_passed').length,
-        installed: locations.filter(l => l.status === 'installed').length,
-        closed: locations.filter(l => l.status === 'closed').length,
+        total: rows.length,
+        pending: rows.filter(l => l.status === 'pending').length,
+        surveyed: rows.filter(l => l.status === 'surveyed').length,
+        in_production: rows.filter(l => l.status === 'in_production').length,
+        qc_passed: rows.filter(l => l.status === 'qc_passed').length,
+        installed: rows.filter(l => l.status === 'installed').length,
+        closed: rows.filter(l => l.status === 'closed').length,
       })
       const map: Record<string, DistrictStat> = {}
-      for (const loc of locations) {
+      for (const loc of rows) {
         const d = loc.district ?? 'Unknown'
         if (!map[d]) map[d] = { district: d, total: 0, pending: 0, surveyed: 0, in_production: 0, completed: 0 }
         map[d].total++
@@ -117,21 +127,28 @@ export default function PublicDashboard() {
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
               {[
-                ['Total Locations', stats?.total, 'text-white', 'bg-slate-400', 'RJ-0001 to RJ-1250'],
-                ['Survey Pending', stats?.pending, 'text-orange-400', 'bg-orange-400', 'Awaiting field visit'],
-                ['Surveyed', stats?.surveyed, 'text-blue-400', 'bg-blue-400', 'Survey submitted'],
-                ['In Production', stats?.in_production, 'text-purple-400', 'bg-purple-400', 'Being manufactured'],
-                ['QC Passed', stats?.qc_passed, 'text-teal-400', 'bg-teal-400', 'Quality approved'],
-                ['Installed', stats?.installed, 'text-emerald-400', 'bg-emerald-400', 'Infrastructure ready'],
-                ['Closed', stats?.closed, 'text-green-400', 'bg-green-400', 'Project complete'],
-                ['Completion Rate', `${completionPct}%`, 'text-yellow-400', 'bg-yellow-400', 'Overall progress'],
-              ].map(([l, v, c, dot, desc]) => (
-                <div key={l as string} className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-sm hover:bg-white/10 transition">
-                  <div className="flex items-center gap-2 mb-2"><span className={`w-2 h-2 rounded-full ${dot}`} /><p className="text-xs text-slate-400 uppercase tracking-wide">{l}</p></div>
-                  <p className={`text-2xl font-black ${c}`}>{v}</p>
-                  <p className="text-xs text-slate-600 mt-0.5">{desc}</p>
-                </div>
-              ))}
+                ['Total Locations', stats?.total, 'text-white', 'bg-slate-400', 'RJ-0001 to RJ-1236', null],
+                ['Survey Pending', stats?.pending, 'text-orange-400', 'bg-orange-400', 'Awaiting field visit', 'pending'],
+                ['Surveyed', stats?.surveyed, 'text-blue-400', 'bg-blue-400', 'Survey submitted', 'surveyed'],
+                ['In Production', stats?.in_production, 'text-purple-400', 'bg-purple-400', 'Being manufactured', 'in_production'],
+                ['QC Passed', stats?.qc_passed, 'text-teal-400', 'bg-teal-400', 'Quality approved', 'qc_passed'],
+                ['Installed', stats?.installed, 'text-emerald-400', 'bg-emerald-400', 'Infrastructure ready', 'installed'],
+                ['Closed', stats?.closed, 'text-green-400', 'bg-green-400', 'Project complete', 'closed'],
+                ['Completion Rate', `${completionPct}%`, 'text-yellow-400', 'bg-yellow-400', 'Overall progress', null],
+              ].map(([l, v, c, dot, desc, statusFilter]) => {
+                const card = (
+                  <div className="bg-white/5 border border-white/10 rounded-2xl p-4 backdrop-blur-sm hover:bg-white/10 transition h-full">
+                    <div className="flex items-center gap-2 mb-2"><span className={`w-2 h-2 rounded-full ${dot}`} /><p className="text-xs text-slate-400 uppercase tracking-wide">{l}</p></div>
+                    <p className={`text-2xl font-black ${c}`}>{v}</p>
+                    <p className="text-xs text-slate-600 mt-0.5">{desc}</p>
+                  </div>
+                )
+                return statusFilter ? (
+                  <Link key={l as string} href={`/public/locations?status=${statusFilter}`} className="block">{card}</Link>
+                ) : (
+                  <div key={l as string}>{card}</div>
+                )
+              })}
             </div>
             <div className="bg-white/5 border border-white/10 rounded-3xl overflow-hidden backdrop-blur-sm">
               <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
@@ -143,11 +160,15 @@ export default function PublicDashboard() {
                   const pct = d.total > 0 ? Math.round((d.completed / d.total) * 100) : 0
                   const surveyedPct = d.total > 0 ? Math.round(((d.surveyed + d.in_production + d.completed) / d.total) * 100) : 0
                   return (
-                    <div key={d.district} className="px-6 py-4 hover:bg-white/5 transition">
+                    <Link
+                      key={d.district}
+                      href={`/public/locations?district=${encodeURIComponent(d.district)}`}
+                      className="block px-6 py-4 hover:bg-white/5 transition"
+                    >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-3">
                           <span className="text-slate-600 text-xs w-5 text-right">{i + 1}</span>
-                          <span className="text-white font-semibold text-sm">{d.district}</span>
+                          <span className="text-white font-semibold text-sm">{titleCase(d.district)}</span>
                           <span className="text-xs text-slate-500">{d.total} locations</span>
                         </div>
                         <div className="flex items-center gap-4 text-xs">
@@ -161,7 +182,7 @@ export default function PublicDashboard() {
                           <div className="bg-blue-500 h-full transition-all duration-700" style={{ width: `${Math.max(0, surveyedPct - pct)}%` }} />
                         </div>
                       </div>
-                    </div>
+                    </Link>
                   )
                 })}
               </div>
