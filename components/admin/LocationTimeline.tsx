@@ -40,6 +40,13 @@ function phaseState(
   phase: Phase,
   currentStatus: LocationStatus
 ): 'completed' | 'current' | 'failed' | 'pending' {
+  // 'closed' is the fully-done terminal state — every phase is complete by
+  // then, including Verified (whose bucket includes 'closed' itself, purely
+  // for labeling — there's no separate "Closed" step in this 8-step UI).
+  // Handled first so 'closed' doesn't fall into the includes() branch below
+  // and render the last step as still "current" instead of checked off.
+  if (currentStatus === 'closed') return 'completed'
+
   if (phase.statuses.includes(currentStatus)) {
     return currentStatus === 'qc_failed' ? 'failed' : 'current'
   }
