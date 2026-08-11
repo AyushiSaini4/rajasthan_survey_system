@@ -47,7 +47,7 @@ export default async function AdminRolloutPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Rollout Tracker</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Pipeline progress across all 1,250 locations, by stage and by district.
+          Pipeline progress across all 1,236 locations, by stage and by district.
         </p>
       </div>
 

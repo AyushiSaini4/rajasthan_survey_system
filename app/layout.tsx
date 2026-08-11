@@ -16,7 +16,7 @@ const geistMono = localFont({
 export const metadata: Metadata = {
   title: 'Rajasthan Infrastructure Survey',
   description:
-    'Special Needs Infrastructure Survey System — 1,250 locations across Rajasthan, India.',
+    'Special Needs Infrastructure Survey System — 1,236 locations across Rajasthan, India.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

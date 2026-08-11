@@ -92,7 +92,7 @@ export default function AdminDashboardClient({ locations }: Props) {
         <StatCard
           label="Total Locations"
           value={stats.total}
-          subtitle="RJ-0001 to RJ-1250"
+          subtitle="RJ-0001 to RJ-1236"
           colorClass="text-blue-700"
           bgClass="bg-blue-50 border-blue-200"
         />

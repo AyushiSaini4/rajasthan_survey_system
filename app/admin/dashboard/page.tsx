@@ -38,7 +38,7 @@ export default async function AdminDashboardPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Locations Dashboard</h1>
         <p className="text-sm text-gray-500 mt-1">
-          All locations across Rajasthan — RJ-0001 to RJ-1250
+          All locations across Rajasthan — RJ-0001 to RJ-1236
         </p>
       </div>
 

@@ -14,7 +14,7 @@ const SCHOOL_SELECT =
 
 // ─── Fetch the full CWSN school directory (admin only) ─────────────────────────
 // Used by RolloutTracker to compute how many known schools have entered the
-// survey pipeline. Directory is small (comparable to the 1,250 locations),
+// survey pipeline. Directory is small (comparable to the 1,236 locations),
 // so a single unpaginated fetch is fine.
 
 export async function getAllCWSNSchools(): Promise<CWSNSchool[]> {

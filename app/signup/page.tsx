@@ -183,7 +183,7 @@ function SignUpForm() {
             </form>
           )}
         </div>
-        <p className="text-center text-xs text-slate-600 mt-6">Rajasthan — 1,250 locations · RJ-0001 to RJ-1250</p>
+        <p className="text-center text-xs text-slate-600 mt-6">Rajasthan — 1,236 locations · RJ-0001 to RJ-1236</p>
       </div>
     </main>
   )

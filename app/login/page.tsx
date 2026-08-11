@@ -51,7 +51,7 @@ export default function LoginPage() {
           {selectedRole === 'public' && (
             <div className="mb-4 p-4 rounded-xl bg-orange-500/20 border border-orange-400/30 text-center">
               <p className="text-orange-200 text-sm mb-3">No login required for public access.</p>
-              <button onClick={() => router.push('/public')} className="w-full py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-orange-500 to-orange-600 shadow-lg hover:opacity-90 transition">View Public Dashboard →</button>
+              <button onClick={() => router.push('/public')} className="w-full py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-orange-500 to-orange-600 shadow-lg hover:opacity-90 transition">View Government Dashboard →</button>
             </div>
           )}
           {selectedRole && selectedRole !== 'public' && (
@@ -78,7 +78,7 @@ export default function LoginPage() {
           )}
           {!selectedRole && <p className="text-center text-xs text-slate-500 mt-2">Select a role above to continue</p>}
         </div>
-        <p className="text-center text-xs text-slate-600 mt-6">Rajasthan — 1,250 locations · RJ-0001 to RJ-1250</p>
+        <p className="text-center text-xs text-slate-600 mt-6">Rajasthan — 1,236 locations · RJ-0001 to RJ-1236</p>
       </div>
     </main>
   )
