@@ -1,4 +1,5 @@
 import { createAdminClient } from './admin'
+import { fetchAllPages } from './paginate'
 import type { PaymentContract, PaymentTranche, Location } from '@/types'
 
 // ─── Extended types ───────────────────────────────────────────────────────────
@@ -99,14 +100,21 @@ export async function getLocationsForDropdown(): Promise<
   Pick<Location, 'id' | 'location_code' | 'name'>[]
 > {
   const admin = createAdminClient()
-  const { data, error } = await admin
-    .from('locations')
-    .select('id, location_code, name')
-    .order('location_code', { ascending: true })
+  // Paginated — see lib/supabase/paginate.ts. This project's 1,000-row
+  // server cap otherwise silently drops 236 of the 1,236 real locations
+  // from this dropdown, with no error.
+  const { data, error } = await fetchAllPages<Pick<Location, 'id' | 'location_code' | 'name'>>(
+    (from, to) =>
+      admin
+        .from('locations')
+        .select('id, location_code, name')
+        .order('location_code', { ascending: true })
+        .range(from, to)
+  )
 
   if (error) {
-    console.error('[getLocationsForDropdown]', error.message)
+    console.error('[getLocationsForDropdown]', (error as { message?: string })?.message)
     return []
   }
-  return (data ?? []) as Pick<Location, 'id' | 'location_code' | 'name'>[]
+  return data ?? []
 }

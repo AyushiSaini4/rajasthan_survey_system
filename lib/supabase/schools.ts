@@ -1,4 +1,5 @@
 import { createClient } from './server'
+import { fetchAllPages } from './paginate'
 import type { CWSNSchool } from '@/types'
 
 // ─── Server-side queries — used by admin pages (RolloutTracker) ───────────────
@@ -14,23 +15,27 @@ const SCHOOL_SELECT =
 
 // ─── Fetch the full CWSN school directory (admin only) ─────────────────────────
 // Used by RolloutTracker to compute how many known schools have entered the
-// survey pipeline. Directory is small (comparable to the 1,236 locations),
-// so a single unpaginated fetch is fine.
+// survey pipeline. Paginated — see paginate.ts — this project's 1,000-row
+// server cap otherwise silently truncates with 1,236 real schools in this
+// table.
 
 export async function getAllCWSNSchools(): Promise<CWSNSchool[]> {
   const supabase = createClient()
 
-  const { data, error } = await supabase
-    .from('cwsn_schools')
-    .select(SCHOOL_SELECT)
-    .order('school_name', { ascending: true })
+  const { data, error } = await fetchAllPages<CWSNSchool>((from, to) =>
+    supabase
+      .from('cwsn_schools')
+      .select(SCHOOL_SELECT)
+      .order('school_name', { ascending: true })
+      .range(from, to) as unknown as PromiseLike<{ data: CWSNSchool[] | null; error: unknown }>
+  )
 
   if (error) {
-    console.error('[getAllCWSNSchools] Supabase error:', error.message)
+    console.error('[getAllCWSNSchools] Supabase error:', (error as { message?: string })?.message)
     throw new Error('Failed to fetch CWSN school directory')
   }
 
-  return (data ?? []) as unknown as CWSNSchool[]
+  return data ?? []
 }
 
 // ─── Fetch the sanctioned CWSN school record for one location ─────────────────

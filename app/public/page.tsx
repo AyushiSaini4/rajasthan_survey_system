@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAllPages } from '@/lib/supabase/paginate'
 import Link from 'next/link'
 
 type DistrictStat = { district: string; total: number; pending: number; surveyed: number; in_production: number; completed: number }
@@ -28,9 +29,17 @@ export default function PublicDashboard() {
       // public_location_stats is a narrow view exposing only safe columns,
       // granted to the `anon` role — see supabase/migrations/20260804_* and
       // 20260811_public_dashboard_drilldown_views.sql.
-      const { data: rows } = await supabase
-        .from('public_location_stats')
-        .select('location_code,name,district,block,status')
+      //
+      // Paginated — see lib/supabase/paginate.ts. This project's 1,000-row
+      // server cap otherwise silently under-counts by 236 of the 1,236 real
+      // locations on this government-facing dashboard, with no error.
+      const { data: rows } = await fetchAllPages<{ location_code: string; name: string | null; district: string; block: string; status: string }>(
+        (from, to) =>
+          supabase
+            .from('public_location_stats')
+            .select('location_code,name,district,block,status')
+            .range(from, to)
+      )
       if (!rows) return
       setStats({
         total: rows.length,

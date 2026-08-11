@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAllPages } from '@/lib/supabase/paginate'
 import Link from 'next/link'
 
 type LocationRow = { location_code: string; name: string | null; district: string; block: string; status: string }
@@ -45,10 +46,16 @@ function PublicLocationsListInner() {
 
   useEffect(() => {
     async function fetchData() {
-      let query = supabase.from('public_location_stats').select('location_code,name,district,block,status')
-      if (statusFilter) query = query.eq('status', statusFilter)
-      if (districtFilter) query = query.eq('district', districtFilter)
-      const { data } = await query.order('location_code', { ascending: true })
+      // Paginated — see lib/supabase/paginate.ts. Same 1,000-row server cap
+      // as the main dashboard; a common status like "pending" alone could
+      // exceed 1,000 of the 1,236 real locations. Query rebuilt fresh per
+      // page rather than reusing one builder across multiple .range() calls.
+      const { data } = await fetchAllPages<LocationRow>((from, to) => {
+        let query = supabase.from('public_location_stats').select('location_code,name,district,block,status')
+        if (statusFilter) query = query.eq('status', statusFilter)
+        if (districtFilter) query = query.eq('district', districtFilter)
+        return query.order('location_code', { ascending: true }).range(from, to)
+      })
       setRows(data ?? [])
       setLoading(false)
     }

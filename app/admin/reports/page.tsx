@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { fetchAllPages } from '@/lib/supabase/paginate'
 
 type Stats = {
   total: number; pending: number; surveyed: number; in_production: number
@@ -17,7 +18,11 @@ export default function ReportsOverview() {
 
   useEffect(() => {
     async function fetch() {
-      const { data: locations } = await supabase.from('locations').select('status,district')
+      // Paginated — see lib/supabase/paginate.ts. Same 1,000-row server
+      // cap otherwise applies with 1,236 real locations.
+      const { data: locations } = await fetchAllPages<{ status: string; district: string }>((from, to) =>
+        supabase.from('locations').select('status,district').range(from, to)
+      )
       if (!locations) return
       setStats({
         total: locations.length,

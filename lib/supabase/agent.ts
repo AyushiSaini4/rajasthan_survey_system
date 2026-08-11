@@ -1,4 +1,5 @@
 import { createClient } from './server'
+import { fetchAllPages } from './paginate'
 import type { Location } from '@/types'
 
 // ─── Agent locations ──────────────────────────────────────────────────────────
@@ -13,16 +14,22 @@ import type { Location } from '@/types'
 export async function getAgentLocations(): Promise<Location[]> {
   const supabase = createClient()
 
-  const { data, error } = await supabase
-    .from('locations')
-    .select(
-      'id, location_code, name, district, block, village, address, ' +
-      'latitude, longitude, assigned_agent, assigned_unit_id, status, created_at'
-    )
-    .order('location_code', { ascending: true })
+  // Paginated — see lib/supabase/paginate.ts. Low practical risk for a
+  // single agent's assignment count today, but the same 1,000-row server
+  // cap applies to this table, so fixed for consistency.
+  const { data, error } = await fetchAllPages<Location>((from, to) =>
+    supabase
+      .from('locations')
+      .select(
+        'id, location_code, name, district, block, village, address, ' +
+        'latitude, longitude, assigned_agent, assigned_unit_id, status, created_at'
+      )
+      .order('location_code', { ascending: true })
+      .range(from, to) as unknown as PromiseLike<{ data: Location[] | null; error: unknown }>
+  )
 
   if (error) {
-    console.error('[getAgentLocations] Supabase error:', error.message)
+    console.error('[getAgentLocations] Supabase error:', (error as { message?: string })?.message)
     throw new Error('Failed to fetch your locations')
   }
 
