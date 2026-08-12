@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createQCInspector, setQCInspectorBanned, type QCInspector } from './actions'
+import { createQCInspector, setQCInspectorBanned, deleteQCInspector, type QCInspector } from './actions'
 
 export default function QCInspectorsClient({ initialInspectors }: { initialInspectors: QCInspector[] }) {
   const router = useRouter()
@@ -11,6 +11,8 @@ export default function QCInspectorsClient({ initialInspectors }: { initialInspe
   const [form, setForm] = useState({ email: '', password: '' })
   const [error, setError] = useState<string | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null)
 
   async function handleAdd() {
     setSaving(true); setError(null)
@@ -26,6 +28,15 @@ export default function QCInspectorsClient({ initialInspectors }: { initialInspe
     setTogglingId(inspector.id)
     await setQCInspectorBanned(inspector.id, !inspector.isBanned)
     setTogglingId(null)
+    router.refresh()
+  }
+
+  async function handleDelete(inspector: QCInspector) {
+    if (!confirm(`Delete "${inspector.email}"? This permanently removes the login account and cannot be undone.`)) return
+    setDeletingId(inspector.id); setRowError(null)
+    const result = await deleteQCInspector(inspector.id)
+    setDeletingId(null)
+    if (!result.success) { setRowError({ id: inspector.id, message: result.error ?? 'Delete failed.' }); return }
     router.refresh()
   }
 
@@ -107,13 +118,25 @@ export default function QCInspectorsClient({ initialInspectors }: { initialInspe
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <button
-                        onClick={() => handleToggleBan(inspector)}
-                        disabled={togglingId === inspector.id}
-                        className="text-xs text-indigo-600 hover:underline font-medium disabled:opacity-50"
-                      >
-                        {togglingId === inspector.id ? 'Updating…' : inspector.isBanned ? 'Restore access' : 'Suspend access'}
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => handleToggleBan(inspector)}
+                          disabled={togglingId === inspector.id || deletingId === inspector.id}
+                          className="text-xs text-indigo-600 hover:underline font-medium disabled:opacity-50"
+                        >
+                          {togglingId === inspector.id ? 'Updating…' : inspector.isBanned ? 'Restore access' : 'Suspend access'}
+                        </button>
+                        <button
+                          onClick={() => handleDelete(inspector)}
+                          disabled={togglingId === inspector.id || deletingId === inspector.id}
+                          className="text-xs text-red-600 hover:underline font-medium disabled:opacity-50"
+                        >
+                          {deletingId === inspector.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                      </div>
+                      {rowError?.id === inspector.id && (
+                        <p className="text-xs text-red-600 mt-1 max-w-xs">{rowError.message}</p>
+                      )}
                     </td>
                   </tr>
                 ))}
