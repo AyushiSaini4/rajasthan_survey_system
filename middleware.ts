@@ -4,6 +4,17 @@ import { NextResponse, type NextRequest } from 'next/server'
 // Routes that never require authentication
 const PUBLIC_ROUTES = ['/login', '/signup', '/public']
 
+// Exact match isn't enough for /public — its drill-down pages
+// (/public/locations, /public/location/RJ-0001, …) are different pathname
+// strings entirely, so an exact-match check let them fall through to the
+// "not authenticated" branch and bounced anonymous visitors to /login even
+// though the whole /public tree is meant to be no-login. Treat each public
+// route as a prefix (still exact for anything with no sub-routes, like
+// /login and /signup).
+function isPublicRoute(pathname: string): boolean {
+  return PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+}
+
 // Role → dashboard mapping (kept here so middleware imports nothing from /lib)
 const ROLE_DASHBOARDS: Record<string, string> = {
   field_agent:        '/agent/dashboard',
@@ -77,7 +88,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // ── Not authenticated ─────────────────────────────────────────────────────
-  if (!user && !PUBLIC_ROUTES.includes(pathname)) {
+  if (!user && !isPublicRoute(pathname)) {
     return buildRedirect('/login', request, supabaseResponse)
   }
 
